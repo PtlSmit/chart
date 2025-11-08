@@ -16,12 +16,22 @@ type OutMsg =
   | { type: 'error'; error: string }
   | { type: 'log'; message: string };
 
+// Narrow shape for object-wrapped payloads
+interface JSONPayload {
+  vulnerabilities?: unknown[];
+  items?: unknown[];
+  data?: unknown[];
+  [key: string]: unknown;
+}
+
 const ctx = self as unknown as DedicatedWorkerGlobalScope;
 
 let emittedCount = 0;
 
 ctx.onmessage = async (ev: MessageEvent<InMsg>) => {
   try {
+    // Reset per load
+    emittedCount = 0;
     if (ev.data.type === 'fetch') {
       await streamParse(await fetch(ev.data.url));
     } else if (ev.data.type === 'file') {
@@ -32,10 +42,11 @@ ctx.onmessage = async (ev: MessageEvent<InMsg>) => {
         if (rs) {
           await parseStream(rs as ReadableStream<Uint8Array>);
         } else {
+          ctx.postMessage({ type: 'log', message: 'Blob.stream() not available; using fallback' } satisfies OutMsg);
           await parseBlobFallback(file);
         }
-      } catch {
-        // Some browsers don't support Blob.stream()
+      } catch (err) {
+        ctx.postMessage({ type: 'log', message: `Blob.stream() threw, using fallback: ${String((err as any)?.message || err)}` } satisfies OutMsg);
         await parseBlobFallback(file);
       }
       // If nothing emitted (e.g., non-array JSON), try structured fallbacks
@@ -45,7 +56,9 @@ ctx.onmessage = async (ev: MessageEvent<InMsg>) => {
           if (typeof text === 'string' && text.length) {
             await tryParseNonArrayPayload(text);
           }
-        } catch {/* ignore */}
+        } catch (err) {
+          ctx.postMessage({ type: 'log', message: `Reading file as text failed: ${String((err as any)?.message || err)}` } satisfies OutMsg);
+        }
       }
     }
     ctx.postMessage({ type: 'done' } satisfies OutMsg);
@@ -195,15 +208,16 @@ async function parseBlobFallback(file: Blob) {
 async function tryParseNonArrayPayload(text: string) {
   // Handle common non-array formats: object with array field, or NDJSON
   try {
-    const obj = JSON.parse(text);
-    const candidates: any[] = Array.isArray(obj)
+    const parsed = JSON.parse(text) as JSONPayload | unknown[];
+    const obj = parsed as JSONPayload | unknown[];
+    const candidates: unknown[] = Array.isArray(obj)
       ? obj
-      : Array.isArray((obj as any)?.vulnerabilities)
-      ? (obj as any).vulnerabilities
-      : Array.isArray((obj as any)?.items)
-      ? (obj as any).items
-      : Array.isArray((obj as any)?.data)
-      ? (obj as any).data
+      : Array.isArray((obj as JSONPayload)?.vulnerabilities)
+      ? (obj as JSONPayload).vulnerabilities!
+      : Array.isArray((obj as JSONPayload)?.items)
+      ? (obj as JSONPayload).items!
+      : Array.isArray((obj as JSONPayload)?.data)
+      ? (obj as JSONPayload).data!
       : [];
     if (Array.isArray(candidates) && candidates.length) {
       const batch: Vulnerability[] = [];
@@ -216,7 +230,12 @@ async function tryParseNonArrayPayload(text: string) {
             emittedCount += batch.length;
             ctx.postMessage({ type: 'items', items: batch.splice(0) } satisfies OutMsg);
           }
-        } catch {/* ignore */}
+        } catch (err) {
+          // Log once per 5k skipped entries to avoid log spam
+          if ((emittedCount + batch.length) % 5000 === 0) {
+            ctx.postMessage({ type: 'log', message: `Skipping malformed entry in object payload: ${String((err as any)?.message || err)}` } satisfies OutMsg);
+          }
+        }
       }
       if (batch.length) {
         emittedCount += batch.length;
@@ -225,13 +244,16 @@ async function tryParseNonArrayPayload(text: string) {
       ctx.postMessage({ type: 'log', message: 'Parsed non-array JSON payload successfully' } satisfies OutMsg);
       return;
     }
-  } catch {/* fall through to NDJSON */}
+  } catch (err) {
+    ctx.postMessage({ type: 'log', message: `Parsing as object/array failed; will try NDJSON. ${String((err as any)?.message || err)}` } satisfies OutMsg);
+  }
 
   // NDJSON: one JSON object per line
   const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
   if (!lines.length) return;
   const batch: Vulnerability[] = [];
   const BATCH_SIZE = 500;
+  let ndjsonParsed = 0;
   for (const line of lines) {
     try {
       const raw = JSON.parse(line);
@@ -241,13 +263,19 @@ async function tryParseNonArrayPayload(text: string) {
         emittedCount += batch.length;
         ctx.postMessage({ type: 'items', items: batch.splice(0) } satisfies OutMsg);
       }
-    } catch {/* ignore malformed line */}
+      ndjsonParsed++;
+    } catch (err) {
+      // Ignore malformed lines, but log occasionally to aid debugging
+      if ((ndjsonParsed % 2000) === 0) {
+        ctx.postMessage({ type: 'log', message: `NDJSON line parse error: ${String((err as any)?.message || err)}` } satisfies OutMsg);
+      }
+    }
   }
   if (batch.length) {
     emittedCount += batch.length;
     ctx.postMessage({ type: 'items', items: batch.splice(0) } satisfies OutMsg);
   }
-  ctx.postMessage({ type: 'log', message: 'Parsed NDJSON payload successfully' } satisfies OutMsg);
+  ctx.postMessage({ type: 'log', message: `Parsed NDJSON payload successfully (objects: ${ndjsonParsed})` } satisfies OutMsg);
 }
 
 export {}; // ensure module

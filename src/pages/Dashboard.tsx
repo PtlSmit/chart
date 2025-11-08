@@ -20,14 +20,19 @@ export default function Dashboard() {
   useEffect(() => {
     if (!autoLoaded) {
       // Auto-load local copy only if it exists (avoid showing global loading banner on 404)
-      setAutoLoaded(true);
-      try {
-        fetch("/uiDemoData.json", { method: "HEAD" })
-          .then((res) => {
-            if (res.ok) loadFromUrl("/uiDemoData.json");
-          })
-          .catch(() => {});
-      } catch {}
+      const checkAndLoad = async () => {
+        try {
+          const res = await fetch("/uiDemoData.json", { method: "HEAD" });
+          if (res.ok) {
+            loadFromUrl("/uiDemoData.json");
+          }
+        } catch {
+          // ignore — demo file not present
+        } finally {
+          setAutoLoaded(true);
+        }
+      };
+      checkAndLoad();
     }
   }, [autoLoaded, loadFromUrl]);
 

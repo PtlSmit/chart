@@ -86,6 +86,16 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const lastRefreshAtRef = useRef<number>(0);
   const isRefreshingRef = useRef(false);
 
+  // Cleanup any pending refresh timer on unmount to avoid leaks
+  useEffect(() => {
+    return () => {
+      if (refreshTimerRef.current != null) {
+        clearTimeout(refreshTimerRef.current);
+        refreshTimerRef.current = null;
+      }
+    };
+  }, []);
+
   useEffect(() => {
     setPageSize(preferences.pageSize);
     document.documentElement.dataset.theme = preferences.darkMode
@@ -149,6 +159,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   }, [filters, page, pageSize, sort]);
 
   const scheduleRefresh = useCallback(() => {
+    if (!repoRef.current) return;
     const THROTTLE_MS = 500;
     const now = Date.now();
     const since = now - lastRefreshAtRef.current;
