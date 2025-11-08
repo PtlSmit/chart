@@ -1,0 +1,17 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Environment
+.env
+
+# OS/Editor noise
+.DS_Store
+*.log
+
+# Large demo data (keep locally, do not commit)
+public/uiDemoData.json
+public/ui_demo.json
+
