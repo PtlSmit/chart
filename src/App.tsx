@@ -19,7 +19,7 @@ export default function App() {
           </div>
         )}
       </header>
-      {loading && <div className="banner loading">Loading data…</div>}
+      {loading && !summary && <div className="banner loading">Loading data…</div>}
       {error && <div className="banner error">{error}</div>}
       <main className="app-main">
         <Outlet />
@@ -27,4 +27,3 @@ export default function App() {
     </div>
   );
 }
-
