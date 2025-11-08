@@ -74,6 +74,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const [results, setResults] = useState<Vulnerability[]>([]);
   const [progressBytes, setProgressBytes] = useState(0);
   const [ingestedCount, setIngestedCount] = useState(0);
+  const ingestedCountRef = useRef(0);
   const [preferences, setPreferencesState] = useState<Preferences>(() => {
     const raw = localStorage.getItem("vuln:prefs");
     return raw ? { ...defaultPrefs, ...JSON.parse(raw) } : defaultPrefs;
@@ -142,14 +143,12 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   }, [filters, page, pageSize, sort]);
 
   const createFreshWorker = () => {
-    // Always start with a fresh worker to avoid queuing a new job behind a long-running one
-    // and to ensure listeners/state are clean per load action.
     if (workerRef.current) {
       try {
         workerRef.current.terminate();
       } catch {}
+      workerRef.current = null;
     }
-    // Vite `?worker` import provides a Worker constructor that's bundler-safe in dev and build
     const w = new WorkerCtor();
     workerRef.current = w;
     return w;
@@ -157,22 +156,22 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const maybeSwitchToIndexedDB = (bytesLoaded: number) => {
     if (!usingIndexedDB.current && bytesLoaded > 120 * 1024 * 1024) {
-      // threshold ~120MB
       usingIndexedDB.current = true;
-      // migrate from memory to IndexedDB for scalability
       (async () => {
         if (!repo) return;
         const memRepo = repo as MemoryRepository;
         const idb = new IndexedDBRepository();
         const count = await (memRepo as any).count();
         if (count > 0) {
-          // naive migration: re-query all
-          const all = await memRepo.query(
-            defaultFilters,
-            0,
-            Number.MAX_SAFE_INTEGER
-          );
-          await idb.addMany(all);
+          const batchSize = 10000;
+          for (let offset = 0; offset < count; offset += batchSize) {
+            const batch = await memRepo.query(
+              defaultFilters,
+              offset,
+              batchSize
+            );
+            if (batch && batch.length) await idb.addMany(batch);
+          }
         }
         setRepo(idb);
       })();
@@ -189,6 +188,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     setTotal(0);
     setProgressBytes(0);
     setIngestedCount(0);
+    ingestedCountRef.current = 0;
     loadedBytes.current = 0;
     usingIndexedDB.current = false;
     repoRef.current = new MemoryRepository();
@@ -203,7 +203,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         console.debug("[Worker]", data.message);
       } else if (data.type === "items") {
         const items = data.items as Vulnerability[];
-        setIngestedCount((n) => n + items.length);
+        // Keep a ref in sync so "done" can reliably report final count
+        ingestedCountRef.current += items.length;
+        setIngestedCount(ingestedCountRef.current);
         // write to whichever repo is current
         if (usingIndexedDB.current) {
           const idb =
@@ -221,7 +223,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
           "[Data] Load done. Bytes:",
           loadedBytes.current,
           "Items ingested:",
-          ingestedCount
+          ingestedCountRef.current
         );
         setLoading(false);
         refresh();
@@ -329,13 +331,15 @@ function toFetchableUrl(url: string): string {
   try {
     const u = new URL(url);
     if (u.hostname === "github.com" && u.pathname.includes("/blob/")) {
-      // https://github.com/{owner}/{repo}/blob/{branch}/{path} -> https://raw.githubusercontent.com/{owner}/{repo}/{branch}/{path}
       const parts = u.pathname.split("/").filter(Boolean);
-      const owner = parts[0];
-      const repo = parts[1];
-      const branch = parts[3];
-      const rest = parts.slice(4).join("/");
-      return `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${rest}`;
+      // Expect: [owner, repo, 'blob', branch, path...]
+      if (parts.length >= 5 && parts[2] === 'blob') {
+        const owner = parts[0];
+        const repo = parts[1];
+        const branch = parts[3];
+        const rest = parts.slice(4).join("/");
+        return `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${rest}`;
+      }
     }
     return url;
   } catch {

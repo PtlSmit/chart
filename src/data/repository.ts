@@ -137,16 +137,28 @@ export class IndexedDBRepository implements DataRepository {
   }
 
   async count(filters?: Filters): Promise<number> {
+    const store = await this.tx('readonly');
     if (!filters) {
-      const store = await this.tx('readonly');
       return await new Promise((resolve, reject) => {
         const req = store.count();
         req.onsuccess = () => resolve(req.result);
         req.onerror = () => reject(req.error);
       });
     }
-    const all = await this.query(filters, 0, Number.MAX_SAFE_INTEGER);
-    return all.length; // simple but effective, can optimize by indexes later
+    // Cursor-based count for filtered queries (avoid loading all results into memory)
+    let c = 0;
+    await new Promise<void>((resolve, reject) => {
+      const req = store.openCursor();
+      req.onsuccess = () => {
+        const cursor = req.result as IDBCursorWithValue | null;
+        if (!cursor) return resolve();
+        const v = cursor.value as Vulnerability;
+        if (this.applyFilters([v], filters).length) c++;
+        cursor.continue();
+      };
+      req.onerror = () => reject(req.error);
+    });
+    return c;
   }
 
   async query(filters: Filters, offset: number, limit: number, sort?: { key: keyof Vulnerability; dir: 'asc' | 'desc' }): Promise<Vulnerability[]> {
@@ -217,7 +229,6 @@ export class IndexedDBRepository implements DataRepository {
   }
 
   private applyFilters(arr: Vulnerability[], f: Filters) {
-    // reuse MemoryRepository logic with small inline filter
     const { query, severity, riskFactors, kaiStatusExclude, dateFrom, dateTo } = f;
     const q = query.trim().toLowerCase();
     const df = dateFrom ? new Date(dateFrom).getTime() : undefined;
@@ -239,4 +250,3 @@ export class IndexedDBRepository implements DataRepository {
     });
   }
 }
-

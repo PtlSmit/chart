@@ -2,17 +2,16 @@ import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { createBrowserRouter, RouterProvider } from 'react-router-dom';
 import App from './App';
-import ReactLazy = React.lazy;
+const ReactLazy = React.lazy;
 const Dashboard = ReactLazy(() => import('@/pages/Dashboard'));
 const VulnDetail = ReactLazy(() => import('@/pages/VulnDetail'));
 const NotFound = ReactLazy(() => import('@/pages/NotFound'));
 import { DataProvider } from '@/context/DataContext';
 import './styles/global.css';
-
 const router = createBrowserRouter([
   {
     path: '/',
-    element: <App />,
+    element: <App />, 
     children: [
       { index: true, element: <Dashboard /> },
       { path: 'vuln/:id', element: <VulnDetail /> },
@@ -20,7 +19,6 @@ const router = createBrowserRouter([
     ]
   }
 ]);
-
 const root = createRoot(document.getElementById('root')!);
 root.render(
   <React.StrictMode>
