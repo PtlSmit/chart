@@ -31,10 +31,16 @@ export class MemoryRepository implements DataRepository {
     if (sort) {
       const { key, dir } = sort;
       arr = arr.slice().sort((a, b) => {
-        const av = (a[key] ?? '') as any;
-        const bv = (b[key] ?? '') as any;
-        if (av < bv) return dir === 'asc' ? -1 : 1;
-        if (av > bv) return dir === 'asc' ? 1 : -1;
+        const av = a[key];
+        const bv = b[key];
+        if (typeof av === 'number' && typeof bv === 'number') {
+          return dir === 'asc' ? av - bv : bv - av;
+        }
+        const as = av == null ? '' : String(av);
+        const bs = bv == null ? '' : String(bv);
+        if (!as && !bs) return 0;
+        if (as < bs) return dir === 'asc' ? -1 : 1;
+        if (as > bs) return dir === 'asc' ? 1 : -1;
         return 0;
       });
     }
@@ -171,10 +177,16 @@ export class IndexedDBRepository implements DataRepository {
     if (sort) {
       const { key, dir } = sort;
       out.sort((a, b) => {
-        const av = (a[key] ?? '') as any;
-        const bv = (b[key] ?? '') as any;
-        if (av < bv) return dir === 'asc' ? -1 : 1;
-        if (av > bv) return dir === 'asc' ? 1 : -1;
+        const av = a[key];
+        const bv = b[key];
+        if (typeof av === 'number' && typeof bv === 'number') {
+          return dir === 'asc' ? av - bv : bv - av;
+        }
+        const as = av == null ? '' : String(av);
+        const bs = bv == null ? '' : String(bv);
+        if (!as && !bs) return 0;
+        if (as < bs) return dir === 'asc' ? -1 : 1;
+        if (as > bs) return dir === 'asc' ? 1 : -1;
         return 0;
       });
     }
@@ -182,7 +194,7 @@ export class IndexedDBRepository implements DataRepository {
   }
 
   async summarize(): Promise<SummaryMetrics> {
-    const severityCounts = { critical: 0, high: 0, medium: 0, low: 0, unknown: 0 } as SummaryMetrics['severityCounts'];
+    const severityCounts: SummaryMetrics['severityCounts'] = { critical: 0, high: 0, medium: 0, low: 0, unknown: 0 };
     const riskFactorCounts: SummaryMetrics['riskFactorCounts'] = {};
     const publishedByMonth: SummaryMetrics['publishedByMonth'] = {};
     const kaiStatusCounts: SummaryMetrics['kaiStatusCounts'] = {};
@@ -239,4 +251,3 @@ export class IndexedDBRepository implements DataRepository {
     });
   }
 }
-

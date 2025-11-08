@@ -1,8 +1,53 @@
 export type Severity = 'critical' | 'high' | 'medium' | 'low' | 'unknown';
 
+// Raw JSON shape from various sources. Enumerates common fields the normalizer reads.
 export interface VulnerabilityRaw {
-  // Raw JSON may include many fields; we keep it open
-  [k: string]: unknown;
+  // identifiers
+  cveId?: string;
+  cve?: string;
+  id?: string;
+  VulnerabilityID?: string;
+
+  // titles/descriptions
+  title?: string;
+  summary?: string;
+  name?: string;
+  packageName?: string;
+  description?: string;
+  desc?: string;
+
+  // severity-related
+  severity?: string; // string form
+  cvssSeverity?: string;
+  baseSeverity?: string;
+  cvss?: number;
+  cvssScore?: number;
+  cvss_v3?: number;
+
+  // dates
+  published?: string; // ISO
+  publishedDate?: string; // ISO
+  date?: string; // ISO
+
+  // tags and risk factors
+  riskFactors?: string[] | Record<string, string | number | boolean | null | undefined> | string;
+  risk?: string[] | Record<string, string | number | boolean | null | undefined> | string;
+  tags?: string[] | Record<string, string | number | boolean | null | undefined> | string;
+
+  // status
+  kaiStatus?: string;
+  aiStatus?: string;
+  status?: string;
+
+  // CWE and meta
+  cwe?: string[];
+  cweIds?: string[];
+  vendor?: string;
+  organization?: string;
+  product?: string;
+  package?: string;
+  source?: string;
+  provider?: string;
 }
 
 export interface Vulnerability {
@@ -43,4 +88,3 @@ export interface Preferences {
   pageSize: number;
   defaultExcludeKai: boolean;
 }
-
