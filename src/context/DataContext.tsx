@@ -37,7 +37,6 @@ interface DataState {
   results: Vulnerability[];
   preferences: Preferences;
   loadFromUrl: (url: string) => void;
-  loadFromFile: (file: File) => void;
   setFilters: (updater: (f: Filters) => Filters) => void;
   setSort: (sort: SortSpec) => void;
   setPage: (page: number) => void;
@@ -82,6 +81,10 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const loadedBytes = useRef(0);
   const usingIndexedDB = useRef(false);
   const lastUrlRef = useRef<string | null>(null);
+  // Throttled refresh controls for incremental updates
+  const refreshTimerRef = useRef<number | null>(null);
+  const lastRefreshAtRef = useRef<number>(0);
+  const isRefreshingRef = useRef(false);
 
   useEffect(() => {
     setPageSize(preferences.pageSize);
@@ -128,14 +131,41 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   );
 
   const refresh = useCallback(async () => {
-    if (!repo) return;
-    const cnt = await repo.count(filters);
-    setTotal(cnt);
-    const out = await repo.query(filters, page * pageSize, pageSize, sort);
-    setResults(out);
-    const s = await repo.summarize();
-    setSummary(s);
-  }, [repo, filters, page, pageSize, sort]);
+    if (isRefreshingRef.current) return;
+    const r = repoRef.current;
+    if (!r) return;
+    isRefreshingRef.current = true;
+    try {
+      const cnt = await r.count(filters);
+      setTotal(cnt);
+      const out = await r.query(filters, page * pageSize, pageSize, sort);
+      setResults(out);
+      const s = await r.summarize();
+      setSummary(s);
+      lastRefreshAtRef.current = Date.now();
+    } finally {
+      isRefreshingRef.current = false;
+    }
+  }, [filters, page, pageSize, sort]);
+
+  const scheduleRefresh = useCallback(() => {
+    const THROTTLE_MS = 500;
+    const now = Date.now();
+    const since = now - lastRefreshAtRef.current;
+    // If enough time has elapsed and we're not currently refreshing, run immediately
+    if (since >= THROTTLE_MS && !isRefreshingRef.current) {
+      void refresh();
+      return;
+    }
+    // Otherwise, ensure one pending timer exists
+    if (refreshTimerRef.current == null) {
+      const wait = Math.max(50, THROTTLE_MS - since);
+      refreshTimerRef.current = window.setTimeout(() => {
+        refreshTimerRef.current = null;
+        void refresh();
+      }, wait);
+    }
+  }, [refresh]);
 
   useEffect(() => {
     refresh();
@@ -193,6 +223,12 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     usingIndexedDB.current = false;
     repoRef.current = new MemoryRepository();
     setRepo(repoRef.current);
+    // reset throttling state
+    if (refreshTimerRef.current != null) {
+      clearTimeout(refreshTimerRef.current);
+      refreshTimerRef.current = null;
+    }
+    lastRefreshAtRef.current = 0;
     const handleMessage = async (ev: MessageEvent<any>) => {
       const data = ev.data as any;
       if (data.type === "progress") {
@@ -216,6 +252,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         } else if (repoRef.current) {
           await repoRef.current.addMany(items);
         }
+        // trigger an incremental UI refresh (throttled)
+        scheduleRefresh();
       } else if (data.type === "done") {
         console.debug(
           "[Data] Load done. Bytes:",
@@ -224,7 +262,12 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
           ingestedCount
         );
         setLoading(false);
-        refresh();
+        // final refresh to show complete results immediately
+        if (refreshTimerRef.current != null) {
+          clearTimeout(refreshTimerRef.current);
+          refreshTimerRef.current = null;
+        }
+        await refresh();
         w.removeEventListener("message", handleMessage as any);
       } else if (data.type === "error") {
         console.error("[Data] Load error:", data.error);
@@ -246,7 +289,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     };
     w.addEventListener("message", handleMessage as any);
     return w;
-  }, [repo, refresh]);
+  }, [scheduleRefresh, refresh]);
 
   const loadFromUrl = useCallback(
     (url: string) => {
@@ -255,18 +298,6 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       lastUrlRef.current = url;
       console.debug("[Data] loadFromUrl", { url, safe });
       w.postMessage({ type: "fetch", url: safe });
-    },
-    [handleWorker]
-  );
-
-  const loadFromFile = useCallback(
-    (file: File) => {
-      const w = handleWorker();
-      console.debug("[Data] loadFromFile", {
-        name: file.name,
-        size: file.size,
-      });
-      w.postMessage({ type: "file", file });
     },
     [handleWorker]
   );
@@ -287,7 +318,6 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       results,
       preferences,
       loadFromUrl,
-      loadFromFile,
       setFilters,
       setSort,
       setPage,
@@ -307,7 +337,6 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       results,
       preferences,
       loadFromUrl,
-      loadFromFile,
       setFilters,
       setSort,
       setPage,

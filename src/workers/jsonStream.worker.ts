@@ -18,14 +18,35 @@ type OutMsg =
 
 const ctx = self as unknown as DedicatedWorkerGlobalScope;
 
+let emittedCount = 0;
+
 ctx.onmessage = async (ev: MessageEvent<InMsg>) => {
   try {
     if (ev.data.type === 'fetch') {
       await streamParse(await fetch(ev.data.url));
     } else if (ev.data.type === 'file') {
       const file = ev.data.file;
-      const rs = file.stream();
-      await parseStream(rs);
+      // Prefer streaming if available; fallback to arrayBuffer/text for broader browser support
+      try {
+        const rs = (file as any).stream?.();
+        if (rs) {
+          await parseStream(rs as ReadableStream<Uint8Array>);
+        } else {
+          await parseBlobFallback(file);
+        }
+      } catch {
+        // Some browsers don't support Blob.stream()
+        await parseBlobFallback(file);
+      }
+      // If nothing emitted (e.g., non-array JSON), try structured fallbacks
+      if (emittedCount === 0) {
+        try {
+          const text = await (file as any).text?.();
+          if (typeof text === 'string' && text.length) {
+            await tryParseNonArrayPayload(text);
+          }
+        } catch {/* ignore */}
+      }
     }
     ctx.postMessage({ type: 'done' } satisfies OutMsg);
   } catch (e: any) {
@@ -92,7 +113,9 @@ async function parseStream(stream: ReadableStream<Uint8Array>) {
 
   const flushBatch = () => {
     if (!batch.length) return;
-    ctx.postMessage({ type: 'items', items: batch.splice(0) } satisfies OutMsg);
+    const items = batch.splice(0);
+    emittedCount += items.length;
+    ctx.postMessage({ type: 'items', items } satisfies OutMsg);
   };
 
   while (true) {
@@ -148,6 +171,83 @@ async function parseStream(stream: ReadableStream<Uint8Array>) {
     if (done) break;
   }
   flushBatch();
+}
+
+async function parseBlobFallback(file: Blob) {
+  // Fallback path: read the whole file and feed in manageable chunks
+  ctx.postMessage({ type: 'log', message: 'Using Blob fallback (no stream())' } satisfies OutMsg);
+  const ab = await (file as any).arrayBuffer?.();
+  if (!ab) throw new Error('Unable to read file');
+  ctx.postMessage({ type: 'progress', bytes: (ab as ArrayBuffer).byteLength } satisfies OutMsg);
+  const stream = new ReadableStream<Uint8Array>({
+    start(c) {
+      const buf = new Uint8Array(ab as ArrayBuffer);
+      const CHUNK = 1 << 20;
+      for (let i = 0; i < buf.byteLength; i += CHUNK) {
+        c.enqueue(buf.subarray(i, Math.min(buf.byteLength, i + CHUNK)));
+      }
+      c.close();
+    }
+  });
+  await parseStream(stream);
+}
+
+async function tryParseNonArrayPayload(text: string) {
+  // Handle common non-array formats: object with array field, or NDJSON
+  try {
+    const obj = JSON.parse(text);
+    const candidates: any[] = Array.isArray(obj)
+      ? obj
+      : Array.isArray((obj as any)?.vulnerabilities)
+      ? (obj as any).vulnerabilities
+      : Array.isArray((obj as any)?.items)
+      ? (obj as any).items
+      : Array.isArray((obj as any)?.data)
+      ? (obj as any).data
+      : [];
+    if (Array.isArray(candidates) && candidates.length) {
+      const batch: Vulnerability[] = [];
+      const BATCH_SIZE = 500;
+      for (const raw of candidates) {
+        try {
+          const norm = normalizeVuln(raw);
+          if (norm) batch.push(norm);
+          if (batch.length >= BATCH_SIZE) {
+            emittedCount += batch.length;
+            ctx.postMessage({ type: 'items', items: batch.splice(0) } satisfies OutMsg);
+          }
+        } catch {/* ignore */}
+      }
+      if (batch.length) {
+        emittedCount += batch.length;
+        ctx.postMessage({ type: 'items', items: batch.splice(0) } satisfies OutMsg);
+      }
+      ctx.postMessage({ type: 'log', message: 'Parsed non-array JSON payload successfully' } satisfies OutMsg);
+      return;
+    }
+  } catch {/* fall through to NDJSON */}
+
+  // NDJSON: one JSON object per line
+  const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  if (!lines.length) return;
+  const batch: Vulnerability[] = [];
+  const BATCH_SIZE = 500;
+  for (const line of lines) {
+    try {
+      const raw = JSON.parse(line);
+      const norm = normalizeVuln(raw);
+      if (norm) batch.push(norm);
+      if (batch.length >= BATCH_SIZE) {
+        emittedCount += batch.length;
+        ctx.postMessage({ type: 'items', items: batch.splice(0) } satisfies OutMsg);
+      }
+    } catch {/* ignore malformed line */}
+  }
+  if (batch.length) {
+    emittedCount += batch.length;
+    ctx.postMessage({ type: 'items', items: batch.splice(0) } satisfies OutMsg);
+  }
+  ctx.postMessage({ type: 'log', message: 'Parsed NDJSON payload successfully' } satisfies OutMsg);
 }
 
 export {}; // ensure module
