@@ -7,7 +7,7 @@ const sevMap: Record<string, Severity> = {
   low: 'low'
 };
 
-function pickSeverity(input?: unknown): Severity {
+function pickSeverity(input?: string | number | null | undefined): Severity {
   if (!input) return 'unknown';
   const s = String(input).toLowerCase();
   return sevMap[s] ?? 'unknown';
@@ -15,37 +15,27 @@ function pickSeverity(input?: unknown): Severity {
 
 export function normalizeVuln(raw: VulnerabilityRaw): Vulnerability | null {
   // Heuristics to map common fields. Adjust as needed for provided JSON.
-  const id = (raw['cveId'] || raw['cve'] || raw['id'] || raw['VulnerabilityID']) as
-    | string
-    | undefined;
+  const id = raw.cveId ?? raw.cve ?? raw.id ?? raw.VulnerabilityID;
   if (!id) return null;
 
-  const title = (raw['title'] || raw['summary'] || raw['name'] || raw['packageName'] || id) as string;
-  const description = (raw['description'] || raw['desc']) as string | undefined;
-  const severity = pickSeverity(
-    raw['severity'] || raw['cvssSeverity'] || raw['baseSeverity']
-  );
-  const published = (raw['published'] || raw['publishedDate'] || raw['date']) as
-    | string
-    | undefined;
+  const title = (raw.title ?? raw.summary ?? raw.name ?? raw.packageName ?? id) as string;
+  const description = raw.description ?? raw.desc;
+  const severity = pickSeverity(raw.severity ?? raw.cvssSeverity ?? raw.baseSeverity);
+  const published = raw.published ?? raw.publishedDate ?? raw.date;
 
   // riskFactors in some datasets is an object map (keys are the factors).
   let riskFactors: string[] | undefined;
-  const rf = (raw['riskFactors'] || raw['risk'] || raw['tags']) as any;
+  const rf = raw.riskFactors ?? raw.risk ?? raw.tags;
   if (Array.isArray(rf)) riskFactors = rf.map((x) => String(x));
-  else if (rf && typeof rf === 'object') riskFactors = Object.keys(rf);
+  else if (rf && typeof rf === 'object' && !Array.isArray(rf)) riskFactors = Object.keys(rf as object);
   else if (typeof rf === 'string') riskFactors = rf.split(/[;,]/).map((s) => s.trim()).filter(Boolean);
 
-  const kaiStatus = (raw['kaiStatus'] || raw['aiStatus'] || raw['status']) as
-    | string
-    | undefined;
-  const cvss = (raw['cvss'] || raw['cvssScore'] || raw['cvss_v3']) as
-    | number
-    | undefined;
-  const cwe = (raw['cwe'] || raw['cweIds']) as string[] | undefined;
-  const vendor = (raw['vendor'] || raw['organization']) as string | undefined;
-  const product = (raw['product'] || raw['package']) as string | undefined;
-  const source = (raw['source'] || raw['provider']) as string | undefined;
+  const kaiStatus = raw.kaiStatus ?? raw.aiStatus ?? raw.status;
+  const cvss = raw.cvss ?? raw.cvssScore ?? raw.cvss_v3;
+  const cwe = raw.cwe ?? raw.cweIds;
+  const vendor = raw.vendor ?? raw.organization;
+  const product = raw.product ?? raw.package;
+  const source = raw.source ?? raw.provider;
 
   return {
     id: String(id),

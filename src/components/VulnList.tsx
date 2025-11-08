@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useData } from '@/context/DataContext';
 import { VirtualList } from '@/utils/virtualize';
 import type { Vulnerability } from '@/types/vuln';
+import type { SortSpec } from '@/types/common';
 import VulnCompareDrawer from '@/components/VulnCompareDrawer';
 
 export default function VulnList() {
@@ -83,7 +84,7 @@ function SeverityBadge({ s }: { s: Vulnerability['severity'] }) {
   return <span className={`badge ${cls}`}>{s}</span>;
 }
 
-function nextSort(current: any, key: keyof Vulnerability) {
+function nextSort(current: SortSpec, key: keyof Vulnerability) {
   if (!current || current.key !== key) return { key, dir: 'asc' as const };
   if (current.dir === 'asc') return { key, dir: 'desc' as const };
   return undefined;

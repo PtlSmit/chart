@@ -8,41 +8,17 @@ import React, {
   useState,
 } from "react";
 import WorkerCtor from "@/workers/jsonStream.worker.ts?worker";
-import type {
-  Filters,
-  Preferences,
-  SummaryMetrics,
-  Vulnerability,
-} from "@/types/vuln";
+import type { WorkerOutMsg } from "@/types/worker";
+import type { Filters, Preferences, SummaryMetrics, Vulnerability } from "@/types/vuln";
+import type { SortSpec } from "@/types/common";
+import type { DataState } from "@/types/context";
 import {
   IndexedDBRepository,
   MemoryRepository,
   type DataRepository,
 } from "@/data/repository";
 
-type SortSpec = { key: keyof Vulnerability; dir: "asc" | "desc" } | undefined;
-
-interface DataState {
-  repo: DataRepository | null;
-  summary: SummaryMetrics | null;
-  loading: boolean;
-  error: string | null;
-  progressBytes: number;
-  ingestedCount: number;
-  filters: Filters;
-  sort: SortSpec;
-  page: number;
-  pageSize: number;
-  total: number;
-  results: Vulnerability[];
-  preferences: Preferences;
-  loadFromUrl: (url: string) => void;
-  setFilters: (updater: (f: Filters) => Filters) => void;
-  setSort: (sort: SortSpec) => void;
-  setPage: (page: number) => void;
-  setPreferences: (updater: (p: Preferences) => Preferences) => void;
-  refresh: () => void;
-}
+// Types moved to src/types/common.ts and src/types/context.ts
 
 const defaultFilters: Filters = {
   query: "",
@@ -205,7 +181,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         if (!repo) return;
         const memRepo = repo as MemoryRepository;
         const idb = new IndexedDBRepository();
-        const count = await (memRepo as any).count();
+        const count = await memRepo.count();
         if (count > 0) {
           // naive migration: re-query all
           const all = await memRepo.query(
@@ -240,8 +216,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       refreshTimerRef.current = null;
     }
     lastRefreshAtRef.current = 0;
-    const handleMessage = async (ev: MessageEvent<any>) => {
-      const data = ev.data as any;
+    const handleMessage = async (ev: MessageEvent<WorkerOutMsg>) => {
+      const data = ev.data;
       if (data.type === "progress") {
         loadedBytes.current = data.bytes;
         setProgressBytes(data.bytes);
@@ -279,7 +255,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
           refreshTimerRef.current = null;
         }
         await refresh();
-        w.removeEventListener("message", handleMessage as any);
+        w.onmessage = null;
       } else if (data.type === "error") {
         console.error("[Data] Load error:", data.error);
         setLoading(false);
@@ -295,10 +271,10 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
           } catch {}
         }
         setError(msg);
-        w.removeEventListener("message", handleMessage as any);
+        w.onmessage = null;
       }
     };
-    w.addEventListener("message", handleMessage as any);
+    w.onmessage = handleMessage;
     return w;
   }, [scheduleRefresh, refresh]);
 
