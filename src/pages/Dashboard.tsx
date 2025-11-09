@@ -41,12 +41,12 @@ export default function Dashboard() {
       <div className="panel">
         <div className="controls" style={{ gap: ".6rem", flexWrap: "wrap" }}>
           <input
-            style={{ minWidth: 360 }}
+            className="flex-1 min-w-0 w-full md:w-[360px]"
             value={url}
             onChange={(e) => setUrl(e.target.value)}
             placeholder="https://…/ui_demo.json"
           />
-          <button className="primary" onClick={() => loadFromUrl(url)}>
+          <button className="btn btn-primary" onClick={() => loadFromUrl(url)}>
             Load from URL
           </button>
           {/* Upload from local file removed */}
@@ -76,7 +76,7 @@ export default function Dashboard() {
       <PreferencesDrawer />
 
       {summary && (
-        <div className="grid cols-3">
+        <div className="grid gap-4 grid-cols-1 md:grid-cols-2 xl:grid-cols-3">
           <SeverityChart />
           <RiskFactorsChart />
           <TrendChart />

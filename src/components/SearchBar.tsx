@@ -10,24 +10,27 @@ export default function SearchBar() {
 
   return (
     <div className="panel">
-      <div className="controls" style={{ gap: '.75rem' }}>
+      <div className="flex flex-wrap items-center gap-3">
         <input
+          className="input input-bordered w-full md:max-w-md"
           value={local}
           onChange={(e) => setLocal(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && apply(local)}
           placeholder="Search CVE id, title, description…"
-          style={{ minWidth: 300 }}
         />
-        <button className="primary" onClick={() => apply(local)}>Search</button>
+        <button className="btn btn-primary" onClick={() => apply(local)}>Search</button>
         {!!filters.query && (
-          <span className="chip">Query: {filters.query} <button className="ghost" onClick={() => apply('')}>×</button></span>
+          <span className="badge badge-outline">
+            Query: {filters.query}
+            <button className="btn btn-xs btn-ghost ml-2" onClick={() => apply('')}>Clear</button>
+          </span>
         )}
       </div>
       {suggestions.length > 0 && (
-        <div className="tiny" style={{ marginTop: '.5rem' }}>
+        <div className="tiny mt-2">
           Suggestions:
           {suggestions.map((s) => (
-            <button key={s} className="ghost" style={{ marginLeft: '.5rem' }} onClick={() => { setLocal(s); apply(s); }}>{s}</button>
+            <button key={s} className="btn btn-xs btn-ghost ml-2" onClick={() => { setLocal(s); apply(s); }}>{s}</button>
           ))}
         </div>
       )}
@@ -43,4 +46,3 @@ function buildSuggestions(input: string): string[] {
   const pool = ['critical', 'high', 'medium', 'low', 'rce', 'xss', 'sql', 'buffer', 'overflow', 'cwe-79', 'cwe-89'];
   return pool.filter((p) => p.startsWith(last)).slice(0, 6);
 }
-
