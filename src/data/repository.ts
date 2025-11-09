@@ -119,6 +119,16 @@ export class RemoteRepository implements DataRepository {
     // no-op for remote
   }
 
+  private async _fetch(url: string): Promise<Response> {
+    const res = await fetch(url);
+    if (!res.ok) {
+      const errorBody = await res.json().catch(() => null as any);
+      const errorMessage = (errorBody as any)?.message || res.statusText || `HTTP error! status: ${res.status}`;
+      throw new Error(`Failed to fetch from ${url}: ${errorMessage}`);
+    }
+    return res;
+  }
+
   private buildParams(filters: Filters, offset: number, limit: number, sort?: { key: keyof Vulnerability; dir: 'asc' | 'desc' }) {
     const p = new URLSearchParams();
     if (filters.query) p.set('query', filters.query);
@@ -140,35 +150,20 @@ export class RemoteRepository implements DataRepository {
   async count(filters?: Filters): Promise<number> {
     const f = filters ?? { query: '', severity: new Set(), riskFactors: new Set(), kaiStatusExclude: new Set() } as Filters;
     const params = this.buildParams(f, 0, 0);
-    const res = await fetch(this.vulnsUrl() + '?' + params.toString());
-    if (!res.ok) {
-      const errorBody = await res.json().catch(() => null);
-      const errorMessage = errorBody?.message || res.statusText || `HTTP error! status: ${res.status}`;
-      throw new Error(`Failed to fetch count: ${errorMessage}`);
-    }
+    const res = await this._fetch(this.vulnsUrl() + '?' + params.toString());
     const json = (await res.json()) as VulnsCountResponse;
     return Number(json.total ?? 0);
   }
 
   async query(filters: Filters, offset: number, limit: number, sort?: { key: keyof Vulnerability; dir: 'asc' | 'desc' }): Promise<Vulnerability[]> {
     const params = this.buildParams(filters, offset, limit, sort);
-    const res = await fetch(this.vulnsUrl() + '?' + params.toString());
-    if (!res.ok) {
-      const errorBody = await res.json().catch(() => null);
-      const errorMessage = errorBody?.message || res.statusText || `HTTP error! status: ${res.status}`;
-      throw new Error(`Failed to fetch vulnerabilities: ${errorMessage}`);
-    }
+    const res = await this._fetch(this.vulnsUrl() + '?' + params.toString());
     const json = (await res.json()) as VulnsPageResponse;
     return Array.isArray(json.results) ? json.results : [];
   }
 
   async summarize(): Promise<SummaryMetrics> {
-    const res = await fetch(this.summaryUrl());
-    if (!res.ok) {
-      const errorBody = await res.json().catch(() => null);
-      const errorMessage = errorBody?.message || res.statusText || `HTTP error! status: ${res.status}`;
-      throw new Error(`Failed to fetch summary: ${errorMessage}`);
-    }
+    const res = await this._fetch(this.summaryUrl());
     return (await res.json()) as SummaryMetrics;
   }
 
