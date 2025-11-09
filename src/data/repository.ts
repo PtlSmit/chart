@@ -1,6 +1,15 @@
 import type { Filters, SummaryMetrics, Vulnerability } from '@/types/vuln';
 import { monthKey } from './normalize';
 
+// Typed API responses for remote repository
+interface VulnsPageResponse {
+  total: number;
+  results: Vulnerability[];
+}
+interface VulnsCountResponse {
+  total: number;
+}
+
 export interface DataRepository {
   addMany(items: Vulnerability[]): Promise<void>;
   count(filters?: Filters): Promise<number>;
@@ -137,8 +146,8 @@ export class RemoteRepository implements DataRepository {
       const errorMessage = errorBody?.message || res.statusText || `HTTP error! status: ${res.status}`;
       throw new Error(`Failed to fetch count: ${errorMessage}`);
     }
-    const json = (await res.json()) as { total?: number };
-    return Number(json.total || 0);
+    const json = (await res.json()) as VulnsCountResponse;
+    return Number(json.total ?? 0);
   }
 
   async query(filters: Filters, offset: number, limit: number, sort?: { key: keyof Vulnerability; dir: 'asc' | 'desc' }): Promise<Vulnerability[]> {
@@ -149,8 +158,8 @@ export class RemoteRepository implements DataRepository {
       const errorMessage = errorBody?.message || res.statusText || `HTTP error! status: ${res.status}`;
       throw new Error(`Failed to fetch vulnerabilities: ${errorMessage}`);
     }
-    const json = (await res.json()) as { results?: Vulnerability[] };
-    return (json.results || []) as Vulnerability[];
+    const json = (await res.json()) as VulnsPageResponse;
+    return Array.isArray(json.results) ? json.results : [];
   }
 
   async summarize(): Promise<SummaryMetrics> {
