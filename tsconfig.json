@@ -11,6 +11,10 @@
     "noEmit": true,
     "jsx": "react-jsx",
     "strict": true,
+    "noImplicitReturns": true,
+    "useUnknownInCatchVariables": true,
+    "exactOptionalPropertyTypes": true,
+    "noUncheckedIndexedAccess": true,
     "baseUrl": ".",
     "paths": {
       "@/components/*": ["src/components/*"],
