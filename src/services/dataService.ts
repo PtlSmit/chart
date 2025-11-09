@@ -38,6 +38,5 @@ export function startLoadFromFile(worker: Worker, file: File) {
 
 export function getDefaultVulnsEndpoint(): string {
   // Allows overriding via VITE_API_URL, defaults to dev mock endpoint
-  const env: any = (import.meta as any).env || {};
-  return env.VITE_API_URL || '/api/v1/vulns';
+  return import.meta.env.VITE_API_URL || '/api/v1/vulns';
 }

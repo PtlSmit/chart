@@ -137,7 +137,7 @@ export class RemoteRepository implements DataRepository {
       const errorMessage = errorBody?.message || res.statusText || `HTTP error! status: ${res.status}`;
       throw new Error(`Failed to fetch count: ${errorMessage}`);
     }
-    const json: any = await res.json();
+    const json = (await res.json()) as { total?: number };
     return Number(json.total || 0);
   }
 
@@ -149,7 +149,7 @@ export class RemoteRepository implements DataRepository {
       const errorMessage = errorBody?.message || res.statusText || `HTTP error! status: ${res.status}`;
       throw new Error(`Failed to fetch vulnerabilities: ${errorMessage}`);
     }
-    const json: any = await res.json();
+    const json = (await res.json()) as { results?: Vulnerability[] };
     return (json.results || []) as Vulnerability[];
   }
 
