@@ -17,15 +17,6 @@ export function toFetchableUrl(url: string): string {
   }
 }
 
-export async function headExists(url: string): Promise<boolean> {
-  try {
-    const res = await fetch(url, { method: 'HEAD' });
-    return res.ok;
-  } catch {
-    return false;
-  }
-}
-
 export function startLoadFromUrl(worker: Worker, url: string) {
   const safe = toFetchableUrl(url);
   worker.postMessage({ type: 'fetch', url: safe });

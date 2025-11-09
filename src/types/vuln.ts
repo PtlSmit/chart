@@ -68,7 +68,7 @@ export interface Vulnerability {
 
 export interface SummaryMetrics {
   total: number;
-  severityCounts: Record<Severity | 'unknown', number>;
+  severityCounts: Record<Severity, number>;
   riskFactorCounts: Record<string, number>;
   publishedByMonth: Record<string, number>; // YYYY-MM -> count
   kaiStatusCounts: Record<string, number>;
