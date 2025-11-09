@@ -15,7 +15,7 @@ export default function AIManualRelationChart() {
   ];
 
   return (
-    <div className="panel">
+    <div className="panel max-w-2xl w-full">
       <div style={{ fontWeight: 600, marginBottom: '.5rem' }}>AI vs Manual Invalids (Total {total})</div>
       <ResponsiveContainer width="100%" height={160}>
         <BarChart data={data} margin={{ top: 10, right: 10, left: 20, bottom: 20 }}>

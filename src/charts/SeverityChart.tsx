@@ -16,7 +16,7 @@ export default function SeverityChart() {
   const total = order.reduce((a, b) => a + b.value, 0);
 
   return (
-    <div className="panel">
+    <div className="panel max-w-2xl w-full">
       <div style={{ fontWeight: 600, marginBottom: '.5rem' }}>Severity Distribution</div>
       <ResponsiveContainer width="100%" height={180}>
         <BarChart data={order} margin={{ top: 10, right: 10, left: 20, bottom: 20 }}>

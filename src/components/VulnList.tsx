@@ -272,7 +272,7 @@ function Row({
         <input type="checkbox" checked={selected} onChange={onSelect} />
       </div>
       <div style={{ width: 200 }}>
-        <button className="ghost" onClick={onOpen}>
+        <button className="btn btn-ghost btn-xs" onClick={onOpen}>
           {v.id}
         </button>
       </div>

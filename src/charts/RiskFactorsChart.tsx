@@ -14,7 +14,7 @@ export default function RiskFactorsChart() {
   const height = top.length * (18 + 8) + 40;
 
   return (
-    <div className="panel">
+    <div className="panel max-w-2xl w-full">
       <div style={{ fontWeight: 600, marginBottom: '.5rem' }}>Risk Factor Frequency</div>
       <ResponsiveContainer width="100%" height={height}>
         <BarChart layout="vertical" data={top} margin={{ top: 10, right: 20, left: 10, bottom: 10 }}>
