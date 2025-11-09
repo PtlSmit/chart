@@ -12,14 +12,15 @@ interface VulnsCountResponse {
 
 export interface DataRepository {
   addMany(items: Vulnerability[]): Promise<void>;
-  count(filters?: Filters): Promise<number>;
+  count(filters?: Filters, signal?: AbortSignal): Promise<number>;
   query(
     filters: Filters,
     offset: number,
     limit: number,
-    sort?: { key: keyof Vulnerability; dir: 'asc' | 'desc' }
+    sort?: { key: keyof Vulnerability; dir: 'asc' | 'desc' },
+    signal?: AbortSignal
   ): Promise<Vulnerability[]>;
-  summarize(): Promise<SummaryMetrics>;
+  summarize(signal?: AbortSignal): Promise<SummaryMetrics>;
   clear(): Promise<void>;
 }
 
@@ -30,18 +31,29 @@ export class MemoryRepository implements DataRepository {
     this.data.push(...items);
   }
 
-  async count(filters?: Filters) {
+  async count(filters?: Filters, _signal?: AbortSignal) {
     if (!filters) return this.data.length;
     return this.applyFilters(this.data, filters).length;
   }
 
-  async query(filters: Filters, offset: number, limit: number, sort?: { key: keyof Vulnerability; dir: 'asc' | 'desc' }) {
+  async query(filters: Filters, offset: number, limit: number, sort?: { key: keyof Vulnerability; dir: 'asc' | 'desc' }, _signal?: AbortSignal) {
     let arr = this.applyFilters(this.data, filters);
     if (sort) {
       const { key, dir } = sort;
+      const sevRank: Record<string, number> = { unknown: 0, low: 1, medium: 2, high: 3, critical: 4 };
       arr = arr.slice().sort((a, b) => {
         const av = a[key];
         const bv = b[key];
+        if (key === 'severity') {
+          const ar = sevRank[String(av ?? 'unknown').toLowerCase()] ?? 0;
+          const br = sevRank[String(bv ?? 'unknown').toLowerCase()] ?? 0;
+          return dir === 'asc' ? ar - br : br - ar;
+        }
+        if (key === 'cvss') {
+          const af = typeof av === 'number' ? av : (av == null ? Number.NEGATIVE_INFINITY : parseFloat(String(av)));
+          const bf = typeof bv === 'number' ? bv : (bv == null ? Number.NEGATIVE_INFINITY : parseFloat(String(bv)));
+          return dir === 'asc' ? af - bf : bf - af;
+        }
         if (typeof av === 'number' && typeof bv === 'number') {
           return dir === 'asc' ? av - bv : bv - av;
         }
@@ -119,8 +131,8 @@ export class RemoteRepository implements DataRepository {
     // no-op for remote
   }
 
-  private async _fetch(url: string): Promise<Response> {
-    const res = await fetch(url);
+  private async _fetch(url: string, signal?: AbortSignal): Promise<Response> {
+    const res = await fetch(url, signal ? { signal } : { signal: null });
     if (!res.ok) {
       const errorBody = await res.json().catch(() => null as any);
       const errorMessage = (errorBody as any)?.message || res.statusText || `HTTP error! status: ${res.status}`;
@@ -147,23 +159,23 @@ export class RemoteRepository implements DataRepository {
   private vulnsUrl() { return this.base.replace(/\/$/, '') + '/vulns'; }
   private summaryUrl() { return this.base.replace(/\/$/, '') + '/summary'; }
 
-  async count(filters?: Filters): Promise<number> {
+  async count(filters?: Filters, signal?: AbortSignal): Promise<number> {
     const f = filters ?? { query: '', severity: new Set(), riskFactors: new Set(), kaiStatusExclude: new Set() } as Filters;
     const params = this.buildParams(f, 0, 0);
-    const res = await this._fetch(this.vulnsUrl() + '?' + params.toString());
+    const res = await this._fetch(this.vulnsUrl() + '?' + params.toString(), signal);
     const json = (await res.json()) as VulnsCountResponse;
     return Number(json.total ?? 0);
   }
 
-  async query(filters: Filters, offset: number, limit: number, sort?: { key: keyof Vulnerability; dir: 'asc' | 'desc' }): Promise<Vulnerability[]> {
+  async query(filters: Filters, offset: number, limit: number, sort?: { key: keyof Vulnerability; dir: 'asc' | 'desc' }, signal?: AbortSignal): Promise<Vulnerability[]> {
     const params = this.buildParams(filters, offset, limit, sort);
-    const res = await this._fetch(this.vulnsUrl() + '?' + params.toString());
+    const res = await this._fetch(this.vulnsUrl() + '?' + params.toString(), signal);
     const json = (await res.json()) as VulnsPageResponse;
     return Array.isArray(json.results) ? json.results : [];
   }
 
-  async summarize(): Promise<SummaryMetrics> {
-    const res = await this._fetch(this.summaryUrl());
+  async summarize(signal?: AbortSignal): Promise<SummaryMetrics> {
+    const res = await this._fetch(this.summaryUrl(), signal);
     return (await res.json()) as SummaryMetrics;
   }
 
@@ -225,7 +237,7 @@ export class IndexedDBRepository implements DataRepository {
     return all.length; // simple but effective, can optimize by indexes later
   }
 
-  async query(filters: Filters, offset: number, limit: number, sort?: { key: keyof Vulnerability; dir: 'asc' | 'desc' }): Promise<Vulnerability[]> {
+  async query(filters: Filters, offset: number, limit: number, sort?: { key: keyof Vulnerability; dir: 'asc' | 'desc' }, _signal?: AbortSignal): Promise<Vulnerability[]> {
     const store = await this.tx('readonly');
     const out: Vulnerability[] = [];
     await new Promise<void>((resolve, reject) => {
@@ -246,9 +258,20 @@ export class IndexedDBRepository implements DataRepository {
     });
     if (sort) {
       const { key, dir } = sort;
+      const sevRank: Record<string, number> = { unknown: 0, low: 1, medium: 2, high: 3, critical: 4 };
       out.sort((a, b) => {
         const av = a[key];
         const bv = b[key];
+        if (key === 'severity') {
+          const ar = sevRank[String(av ?? 'unknown').toLowerCase()] ?? 0;
+          const br = sevRank[String(bv ?? 'unknown').toLowerCase()] ?? 0;
+          return dir === 'asc' ? ar - br : br - ar;
+        }
+        if (key === 'cvss') {
+          const af = typeof av === 'number' ? av : (av == null ? Number.NEGATIVE_INFINITY : parseFloat(String(av)));
+          const bf = typeof bv === 'number' ? bv : (bv == null ? Number.NEGATIVE_INFINITY : parseFloat(String(bv)));
+          return dir === 'asc' ? af - bf : bf - af;
+        }
         if (typeof av === 'number' && typeof bv === 'number') {
           return dir === 'asc' ? av - bv : bv - av;
         }
