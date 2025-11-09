@@ -8,17 +8,7 @@ import VulnCompareDrawer from "@/components/VulnCompareDrawer";
 
 export default function VulnList() {
   const { results, total, page, pageSize, setPage, setSort, sort, setPreferences, filters, setFilters } = useData();
-  const [isMobile, setIsMobile] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
-
-  useEffect(() => {
-    const mql = window.matchMedia("(max-width: 767px)");
-    const handler = (e: MediaQueryListEvent) => setIsMobile(e.matches);
-    // initialize
-    setIsMobile(mql.matches);
-    mql.addEventListener("change", handler);
-    return () => mql.removeEventListener("change", handler);
-  }, []);
   const [selected, setSelected] = useState<Record<string, Vulnerability>>({});
   const nav = useNavigate();
 
@@ -197,225 +187,229 @@ export default function VulnList() {
 
   return (
     <div className="panel">
-      <div className="flex items-center justify-between gap-2 flex-wrap">
-        <div>
-          <strong>{total.toLocaleString()}</strong> results • Page {page + 1} /{" "}
-          {pages}
-        </div>
-        <div className="flex items-center gap-3 flex-wrap">
-          {PageSizeControl}
-          {/* Numbered pagination */}
-          <div className="flex items-center gap-1">
-            <div className="join">
-              <button className="btn btn-xs join-item" onClick={() => goto(0)} disabled={page === 0}>&laquo;</button>
-              {pagesToShow.map((p, idx) =>
-                p === '…' ? (
-                  <button key={`ellipsis-${idx}`} className="btn btn-xs join-item" disabled>…</button>
-                ) : (
-                  <button
-                    key={p}
-                    className={`btn btn-xs join-item ${p === page ? 'btn-active' : ''}`}
-                    onClick={() => goto(p as number)}
-                  >
-                    {(p as number) + 1}
-                  </button>
-                )
-              )}
-              <button className="btn btn-xs join-item" onClick={() => goto(pages - 1)} disabled={page >= pages - 1}>&raquo;</button>
-            </div>
-          </div>
-          {gotoInputEl}
-          <div className="flex gap-2">
-            <button className="btn btn-sm btn-ghost" onClick={() => setPage(0)} disabled={page === 0}>First</button>
-            <button className="btn btn-sm btn-ghost" onClick={() => setPage(Math.max(0, page - 1))} disabled={page === 0}>Prev</button>
-            <button className="btn btn-sm btn-ghost" onClick={() => setPage(Math.min(pages - 1, page + 1))} disabled={page >= pages - 1}>Next</button>
-            <button className="btn btn-sm btn-ghost" onClick={() => setPage(pages - 1)} disabled={page >= pages - 1}>Last</button>
-          </div>
-        </div>
-      </div>
+      <Controls
+        sort={sort}
+        setSortKey={setSortKey}
+        toggleSortDir={toggleSortDir}
+        SORT_KEYS={SORT_KEYS}
+        PageSizeControl={PageSizeControl}
+        pagesToShow={pagesToShow}
+        goto={goto}
+        page={page}
+        pages={pages}
+        gotoInputEl={gotoInputEl}
+        setPage={setPage}
+      />
 
       {/* Mobile: stacked cards for best readability */}
-      {isMobile && (
-        <div className="mt-3 space-y-2">
-          <div className="flex items-center gap-2 flex-wrap">
-            <select
-              className="select select-bordered select-sm"
-              value={(sort?.key as string) || "id"}
-              onChange={(e) =>
-                setSortKey(e.target.value as keyof Vulnerability)
-              }
-            >
-              {SORT_KEYS.map((s) => (
-                <option key={s.key as string} value={s.key as string}>
-                  {s.label}
-                </option>
-              ))}
-            </select>
-            <button
-              className="btn btn-sm btn-ghost"
-              onClick={toggleSortDir}
-              disabled={!sort}
-            >
-              {sort?.dir === "desc" ? "Desc" : "Asc"}
-            </button>
-            {PageSizeControl}
-            <div className="flex gap-2 ml-auto">
-              {/* Compact numbered pagination on mobile */}
-              <div className="flex items-center gap-1">
-                <div className="join">
-                  <button className="btn btn-xs join-item" onClick={() => goto(0)} disabled={page === 0}>&laquo;</button>
-                  {pagesToShow.map((p, idx) =>
-                    p === '…' ? (
-                      <button key={`m-ellipsis-${idx}`} className="btn btn-xs join-item" disabled>…</button>
-                    ) : (
-                      <button
-                        key={`m-${p}`}
-                        className={`btn btn-xs join-item ${p === page ? 'btn-active' : ''}`}
-                        onClick={() => goto(p as number)}
-                      >
-                        {(p as number) + 1}
-                      </button>
-                    )
-                  )}
-                  <button className="btn btn-xs join-item" onClick={() => goto(pages - 1)} disabled={page >= pages - 1}>&raquo;</button>
+      <div className="md:hidden mt-3 space-y-2">
+        {rows.map((v) => (
+          <div key={v.id} className="card bg-base-200">
+            <div className="card-body p-3">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    className="checkbox checkbox-sm"
+                    checked={!!selected[v.id]}
+                    onChange={() => toggleSelect(v)}
+                  />
+                  <button
+                    className="btn btn-ghost btn-xs"
+                    onClick={() => nav(`/vuln/${encodeURIComponent(v.id)}`)}
+                  >
+                    {v.id}
+                  </button>
+                </div>
+                <div className="shrink-0">
+                  <SeverityBadge s={v.severity} />
                 </div>
               </div>
-              {gotoInputEl}
-              <button className="btn btn-sm btn-ghost" onClick={() => setPage(0)} disabled={page === 0}>First</button>
-              <button className="btn btn-sm btn-ghost" onClick={() => setPage(Math.max(0, page - 1))} disabled={page === 0}>Prev</button>
-              <button className="btn btn-sm btn-ghost" onClick={() => setPage(Math.min(pages - 1, page + 1))} disabled={page >= pages - 1}>Next</button>
-              <button className="btn btn-sm btn-ghost" onClick={() => setPage(pages - 1)} disabled={page >= pages - 1}>Last</button>
+              <div className="text-sm text-left truncate" title={v.title}>
+                {v.title}
+              </div>
+              <div className="text-xs text-left text-[var(--muted)] flex flex-wrap gap-x-4 gap-y-1">
+                <span>
+                  <span className="opacity-70">Published:</span>{" "}
+                  {v.published?.slice(0, 10) ?? "-"}
+                </span>
+                <span>
+                  <span className="opacity-70">CVSS:</span> {v.cvss ?? "-"}
+                </span>
+                <span className="truncate">
+                  <span className="opacity-70">Status:</span>{" "}
+                  {v.kaiStatus ?? "-"}
+                </span>
+              </div>
             </div>
           </div>
-          {rows.map((v) => (
-            <div key={v.id} className="card bg-base-200">
-              <div className="card-body p-3">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex items-center gap-2">
+        ))}
+      </div>
+
+      {/* Desktop: table or virtual list for large datasets */}
+      <div className="hidden md:block mt-3">
+        {useTable ? (
+          <table className="table table-zebra table-auto w-full">
+            <thead>{headerRow}</thead>
+            <tbody>
+              {rows.map((v) => (
+                <tr key={v.id}>
+                  <td className="w-10">
                     <input
                       type="checkbox"
                       className="checkbox checkbox-sm"
                       checked={!!selected[v.id]}
                       onChange={() => toggleSelect(v)}
                     />
+                  </td>
+                  <td className="w-[140px] whitespace-nowrap">
                     <button
                       className="btn btn-ghost btn-xs"
                       onClick={() => nav(`/vuln/${encodeURIComponent(v.id)}`)}
                     >
                       {v.id}
                     </button>
-                  </div>
-                  <div className="shrink-0">
+                  </td>
+                  <td className="align-middle">
+                    <div className="truncate max-w-[260px] md:max-w-[420px]">{v.title}</div>
+                  </td>
+                  <td className="w-[90px]">
                     <SeverityBadge s={v.severity} />
-                  </div>
-                </div>
-                <div className="text-sm text-left truncate" title={v.title}>
-                  {v.title}
-                </div>
-                <div className="text-xs text-left text-[var(--muted)] flex flex-wrap gap-x-4 gap-y-1">
-                  <span>
-                    <span className="opacity-70">Published:</span>{" "}
+                  </td>
+                  <td className="hidden lg:table-cell w-[120px]">
                     {v.published?.slice(0, 10) ?? "-"}
-                  </span>
-                  <span>
-                    <span className="opacity-70">CVSS:</span> {v.cvss ?? "-"}
-                  </span>
-                  <span className="truncate">
-                    <span className="opacity-70">Status:</span>{" "}
-                    {v.kaiStatus ?? "-"}
-                  </span>
-                </div>
+                  </td>
+                  <td className="hidden lg:table-cell w-[60px]">{v.cvss ?? "-"}</td>
+                  <td className="hidden xl:table-cell w-[160px]">{v.kaiStatus ?? "-"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : (
+          <div>
+            <div className="list-row font-semibold">
+              <div className="w-10" />
+              <div className="w-[140px] truncate cursor-pointer" onClick={() => setSort(nextSort(sort, 'id'))}>
+                ID {sort?.key === 'id' ? (sort.dir === 'asc' ? '▲' : '▼') : ''}
+              </div>
+              <div className="flex-1 min-w-0 truncate cursor-pointer" onClick={() => setSort(nextSort(sort, 'title'))}>
+                Title {sort?.key === 'title' ? (sort.dir === 'asc' ? '▲' : '▼') : ''}
+              </div>
+              <div className="w-[90px] cursor-pointer" onClick={() => setSort(nextSort(sort, 'severity'))}>
+                Severity {sort?.key === 'severity' ? (sort.dir === 'asc' ? '▲' : '▼') : ''}
+              </div>
+              <div className="hidden lg:block w-[120px] cursor-pointer" onClick={() => setSort(nextSort(sort, 'published'))}>
+                Published {sort?.key === 'published' ? (sort.dir === 'asc' ? '▲' : '▼') : ''}
+              </div>
+              <div className="hidden lg:block w-[60px] cursor-pointer" onClick={() => setSort(nextSort(sort, 'cvss'))}>
+                CVSS {sort?.key === 'cvss' ? (sort.dir === 'asc' ? '▲' : '▼') : ''}
+              </div>
+              <div className="hidden xl:block w-[160px] cursor-pointer" onClick={() => setSort(nextSort(sort, 'kaiStatus'))}>
+                kaiStatus {sort?.key === 'kaiStatus' ? (sort.dir === 'asc' ? '▲' : '▼') : ''}
               </div>
             </div>
-          ))}
-        </div>
-      )}
-
-      {/* Desktop: table or virtual list for large datasets */}
-      {!isMobile && (
-        <div className="mt-3">
-          {useTable ? (
-            <table className="table table-zebra table-auto w-full">
-              <thead>{headerRow}</thead>
-              <tbody>
-                {rows.map((v) => (
-                  <tr key={v.id}>
-                    <td className="w-10">
-                      <input
-                        type="checkbox"
-                        className="checkbox checkbox-sm"
-                        checked={!!selected[v.id]}
-                        onChange={() => toggleSelect(v)}
-                      />
-                    </td>
-                    <td className="w-[140px] whitespace-nowrap">
-                      <button
-                        className="btn btn-ghost btn-xs"
-                        onClick={() => nav(`/vuln/${encodeURIComponent(v.id)}`)}
-                      >
-                        {v.id}
-                      </button>
-                    </td>
-                    <td className="align-middle">
-                      <div className="truncate max-w-[260px] md:max-w-[420px]">{v.title}</div>
-                    </td>
-                    <td className="w-[90px]">
-                      <SeverityBadge s={v.severity} />
-                    </td>
-                    <td className="hidden lg:table-cell w-[120px]">
-                      {v.published?.slice(0, 10) ?? "-"}
-                    </td>
-                    <td className="hidden lg:table-cell w-[60px]">{v.cvss ?? "-"}</td>
-                    <td className="hidden xl:table-cell w-[160px]">{v.kaiStatus ?? "-"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          ) : (
-            <div>
-              <div className="list-row font-semibold">
-                <div className="w-10" />
-                <div className="w-[140px] truncate cursor-pointer" onClick={() => setSort(nextSort(sort, 'id'))}>
-                  ID {sort?.key === 'id' ? (sort.dir === 'asc' ? '▲' : '▼') : ''}
-                </div>
-                <div className="flex-1 min-w-0 truncate cursor-pointer" onClick={() => setSort(nextSort(sort, 'title'))}>
-                  Title {sort?.key === 'title' ? (sort.dir === 'asc' ? '▲' : '▼') : ''}
-                </div>
-                <div className="w-[90px] cursor-pointer" onClick={() => setSort(nextSort(sort, 'severity'))}>
-                  Severity {sort?.key === 'severity' ? (sort.dir === 'asc' ? '▲' : '▼') : ''}
-                </div>
-                <div className="hidden lg:block w-[120px] cursor-pointer" onClick={() => setSort(nextSort(sort, 'published'))}>
-                  Published {sort?.key === 'published' ? (sort.dir === 'asc' ? '▲' : '▼') : ''}
-                </div>
-                <div className="hidden lg:block w-[60px] cursor-pointer" onClick={() => setSort(nextSort(sort, 'cvss'))}>
-                  CVSS {sort?.key === 'cvss' ? (sort.dir === 'asc' ? '▲' : '▼') : ''}
-                </div>
-                <div className="hidden xl:block w-[160px] cursor-pointer" onClick={() => setSort(nextSort(sort, 'kaiStatus'))}>
-                  kaiStatus {sort?.key === 'kaiStatus' ? (sort.dir === 'asc' ? '▲' : '▼') : ''}
-                </div>
-              </div>
-              <VirtualList
-                items={rows}
-                itemHeight={48}
-                height={420}
-                render={(v) => (
-                  <Row
-                    key={v.id}
-                    v={v}
-                    selected={!!selected[v.id]}
-                    onSelect={() => toggleSelect(v)}
-                    onOpen={() => nav(`/vuln/${encodeURIComponent(v.id)}`)}
-                  />
-                )}
-              />
-            </div>
-          )}
-        </div>
-      )}
+            <VirtualList
+              items={rows}
+              itemHeight={48}
+              height={420}
+              render={(v) => (
+                <Row
+                  key={v.id}
+                  v={v}
+                  selected={!!selected[v.id]}
+                  onSelect={() => toggleSelect(v)}
+                  onOpen={() => nav(`/vuln/${encodeURIComponent(v.id)}`)}
+                />
+              )}
+            />
+          </div>
+        )}
+      </div>
       <VulnCompareDrawer items={Object.values(selected)} />
     </div>
   );
 }
+
+function Controls({
+  sort,
+  setSortKey,
+  toggleSortDir,
+  SORT_KEYS,
+  PageSizeControl,
+  pagesToShow,
+  goto,
+  page,
+  pages,
+  gotoInputEl,
+  setPage,
+}: {
+  sort: SortSpec;
+  setSortKey: (k: keyof Vulnerability) => void;
+  toggleSortDir: () => void;
+  SORT_KEYS: Array<{ key: keyof Vulnerability; label: string }>;
+  PageSizeControl: React.ReactNode;
+  pagesToShow: (number | "…")[];
+  goto: (n: number) => void;
+  page: number;
+  pages: number;
+  gotoInputEl: React.ReactNode;
+  setPage: (p: number) => void;
+}) {
+  return (
+    <div className="flex items-center gap-2 flex-wrap">
+      <div className="md:hidden flex items-center gap-2">
+        <select
+          className="select select-bordered select-sm"
+          value={(sort?.key as string) || "id"}
+          onChange={(e) =>
+            setSortKey(e.target.value as keyof Vulnerability)
+          }
+        >
+          {SORT_KEYS.map((s) => (
+            <option key={s.key as string} value={s.key as string}>
+              {s.label}
+            </option>
+          ))}
+        </select>
+        <button
+          className="btn btn-sm btn-ghost"
+          onClick={toggleSortDir}
+          disabled={!sort}
+        >
+          {sort?.dir === "desc" ? "Desc" : "Asc"}
+        </button>
+      </div>
+      {PageSizeControl}
+      <div className="flex items-center gap-1">
+        <div className="join">
+          <button className="btn btn-xs join-item" onClick={() => goto(0)} disabled={page === 0}>&laquo;</button>
+          {pagesToShow.map((p, idx) =>
+            p === '…' ? (
+              <button key={`ellipsis-${idx}`} className="btn btn-xs join-item" disabled>…</button>
+            ) : (
+              <button
+                key={p}
+                className={`btn btn-xs join-item ${p === page ? 'btn-active' : ''}`}
+                onClick={() => goto(p as number)}
+              >
+                {(p as number) + 1}
+              </button>
+            )
+          )}
+          <button className="btn btn-xs join-item" onClick={() => goto(pages - 1)} disabled={page >= pages - 1}>&raquo;</button>
+        </div>
+      </div>
+      {gotoInputEl}
+      <div className="hidden md:flex gap-2">
+        <button className="btn btn-sm btn-ghost" onClick={() => setPage(0)} disabled={page === 0}>First</button>
+        <button className="btn btn-sm btn-ghost" onClick={() => setPage(Math.max(0, page - 1))} disabled={page === 0}>Prev</button>
+        <button className="btn btn-sm btn-ghost" onClick={() => setPage(Math.min(pages - 1, page + 1))} disabled={page >= pages - 1}>Next</button>
+        <button className="btn btn-sm btn-ghost" onClick={() => setPage(pages - 1)} disabled={page >= pages - 1}>Last</button>
+      </div>
+    </div>
+  );
+}
+
 
 function Row({
   v,

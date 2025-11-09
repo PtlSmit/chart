@@ -10,7 +10,7 @@ export default function App() {
         <Link to="/" className="brand">Vulnerability Dashboard</Link>
         <div className="spacer" />
         {summary && (
-          <div className="header-stats">
+          <div className="header-stats hidden md:flex">
             <span>Total: {summary.total.toLocaleString()}</span>
             <span>Critical: {summary.severityCounts.critical ?? 0}</span>
             <span>High: {summary.severityCounts.high ?? 0}</span>
