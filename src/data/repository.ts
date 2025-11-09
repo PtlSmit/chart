@@ -141,6 +141,15 @@ export class RemoteRepository implements DataRepository {
     return res;
   }
 
+  private async _json<T>(res: Response): Promise<T> {
+    try {
+      return (await res.json()) as T;
+    } catch (err) {
+      const where = (res as any)?.url || 'response';
+      throw new Error(`Failed to parse JSON from ${where}: ${String((err as Error)?.message || err)}`);
+    }
+  }
+
   private buildParams(filters: Filters, offset: number, limit: number, sort?: { key: keyof Vulnerability; dir: 'asc' | 'desc' }) {
     const p = new URLSearchParams();
     if (filters.query) p.set('query', filters.query);
@@ -163,20 +172,20 @@ export class RemoteRepository implements DataRepository {
     const f = filters ?? { query: '', severity: new Set(), riskFactors: new Set(), kaiStatusExclude: new Set() } as Filters;
     const params = this.buildParams(f, 0, 0);
     const res = await this._fetch(this.vulnsUrl() + '?' + params.toString(), signal);
-    const json = (await res.json()) as VulnsCountResponse;
+    const json = await this._json<VulnsCountResponse>(res);
     return Number(json.total ?? 0);
   }
 
   async query(filters: Filters, offset: number, limit: number, sort?: { key: keyof Vulnerability; dir: 'asc' | 'desc' }, signal?: AbortSignal): Promise<Vulnerability[]> {
     const params = this.buildParams(filters, offset, limit, sort);
     const res = await this._fetch(this.vulnsUrl() + '?' + params.toString(), signal);
-    const json = (await res.json()) as VulnsPageResponse;
+    const json = await this._json<VulnsPageResponse>(res);
     return Array.isArray(json.results) ? json.results : [];
   }
 
   async summarize(signal?: AbortSignal): Promise<SummaryMetrics> {
     const res = await this._fetch(this.summaryUrl(), signal);
-    return (await res.json()) as SummaryMetrics;
+    return await this._json<SummaryMetrics>(res);
   }
 
   async clear(): Promise<void> {
