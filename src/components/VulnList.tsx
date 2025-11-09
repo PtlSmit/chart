@@ -1,14 +1,15 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useData } from "@/context/DataContext";
 import { VirtualList } from "@/utils/virtualize";
-import type { Vulnerability } from "@/types/vuln";
+import type { Vulnerability, Severity } from "@/types/vuln";
 import type { SortSpec } from "@/types/common";
 import VulnCompareDrawer from "@/components/VulnCompareDrawer";
 
 export default function VulnList() {
-  const { results, total, page, pageSize, setPage, setSort, sort } = useData();
+  const { results, total, page, pageSize, setPage, setSort, sort, setPreferences, filters, setFilters } = useData();
   const [isMobile, setIsMobile] = useState(false);
+  const [searchParams, setSearchParams] = useSearchParams();
 
   useEffect(() => {
     const mql = window.matchMedia("(max-width: 767px)");
@@ -32,21 +33,20 @@ export default function VulnList() {
 
   const pages = Math.ceil(total / pageSize) || 1;
 
-  const headers: { key: keyof Vulnerability; label: string; width: number }[] =
-    [
-      { key: "id", label: "ID", width: 200 },
-      { key: "title", label: "Title", width: 420 },
-      { key: "severity", label: "Severity", width: 120 },
-      { key: "published", label: "Published", width: 160 },
-      { key: "cvss", label: "CVSS", width: 80 },
-      { key: "kaiStatus", label: "kaiStatus", width: 200 },
-    ];
+  const headers: { key: keyof Vulnerability; label: string; className?: string }[] = [
+    { key: "id", label: "ID", className: "w-[140px]" },
+    { key: "title", label: "Title" },
+    { key: "severity", label: "Severity", className: "w-[90px]" },
+    { key: "published", label: "Published", className: "hidden lg:table-cell w-[120px]" },
+    { key: "cvss", label: "CVSS", className: "hidden lg:table-cell w-[60px]" },
+    { key: "kaiStatus", label: "kaiStatus", className: "hidden xl:table-cell w-[160px]" },
+  ];
 
   const headerRow = (
     <tr>
       <th className="w-10"></th>
       {headers.map((h) => (
-        <th key={h.key as string} style={{ width: h.width }}>
+        <th key={h.key as string} className={h.className || ''}>
           <button
             className="btn btn-ghost btn-xs"
             onClick={() => setSort(nextSort(sort, h.key))}
@@ -81,35 +81,163 @@ export default function VulnList() {
     setSort({ key: sort.key, dir: sort.dir === "asc" ? "desc" : "asc" });
   };
 
+  const changePageSize = (n: number) => {
+    setPreferences((p) => ({ ...p, pageSize: n }));
+    setPage(0);
+  };
+
+  const PageSizeControl = (
+    <div className="flex items-center gap-2">
+      <span className="text-xs opacity-70">Page size</span>
+      <select
+        className="select select-bordered select-xs"
+        value={pageSize}
+        onChange={(e) => changePageSize(Number(e.target.value))}
+      >
+        {[25, 50, 100, 200].map((n) => (
+          <option key={n} value={n}>{n}</option>
+        ))}
+      </select>
+    </div>
+  );
+
+  // Sync from URL → state on mount
+  useEffect(() => {
+    const p = Number(searchParams.get('p'));
+    const s = Number(searchParams.get('size'));
+    const sk = searchParams.get('sort') as keyof Vulnerability | null;
+    const sd = searchParams.get('dir') as 'asc' | 'desc' | null;
+    if (Number.isFinite(p) && p >= 1) setPage(p - 1);
+    if (Number.isFinite(s) && s > 0) setPreferences((pr) => ({ ...pr, pageSize: s }));
+    if (sk) setSort({ key: sk as keyof Vulnerability, dir: sd === 'desc' ? 'desc' : 'asc' });
+    // Filters: q, sev, rf, from, to, kx
+    const q = searchParams.get('q');
+    const sev = searchParams.get('sev');
+    const rf = searchParams.get('rf');
+    const from = searchParams.get('from');
+    const to = searchParams.get('to');
+    const kx = searchParams.get('kx');
+    if (q || sev || rf || from || to || kx) {
+      setFilters((f) => ({
+        ...f,
+        query: q ?? f.query,
+        severity: sev ? new Set<Severity>(sev.split(',').filter(Boolean) as Severity[]) : f.severity,
+        riskFactors: rf ? new Set(rf.split(',').filter(Boolean)) : f.riskFactors,
+        kaiStatusExclude: kx ? new Set(kx.split(',').filter(Boolean)) : f.kaiStatusExclude,
+        dateFrom: from || undefined,
+        dateTo: to || undefined,
+      }));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Sync state → URL when page/pageSize/sort change
+  useEffect(() => {
+    const next = new URLSearchParams(searchParams);
+    next.set('p', String(page + 1));
+    next.set('size', String(pageSize));
+    if (sort?.key) next.set('sort', String(sort.key)); else next.delete('sort');
+    if (sort?.dir) next.set('dir', sort.dir); else next.delete('dir');
+    // Filters
+    if (filters.query) next.set('q', filters.query); else next.delete('q');
+    const sev = Array.from(filters.severity).sort();
+    const rf = Array.from(filters.riskFactors).sort();
+    const kx = Array.from(filters.kaiStatusExclude).sort();
+    if (sev.length) next.set('sev', sev.join(',')); else next.delete('sev');
+    if (rf.length) next.set('rf', rf.join(',')); else next.delete('rf');
+    if (kx.length) next.set('kx', kx.join(',')); else next.delete('kx');
+    if (filters.dateFrom) next.set('from', filters.dateFrom); else next.delete('from');
+    if (filters.dateTo) next.set('to', filters.dateTo); else next.delete('to');
+    // Only push if changed to avoid loops
+    const changed = next.toString() !== searchParams.toString();
+    if (changed) setSearchParams(next, { replace: true });
+  }, [page, pageSize, sort, filters, searchParams, setSearchParams]);
+
+  // Numbered pagination with ellipses
+  const pageRange = (totalPages: number, current: number, delta = 2): (number | '…')[] => {
+    const result: (number | '…')[] = [];
+    if (totalPages <= 1) return [0];
+    const start = Math.max(0, current - delta);
+    const end = Math.min(totalPages - 1, current + delta);
+    // Always include first
+    result.push(0);
+    if (start > 1) result.push('…');
+    for (let i = start; i <= end; i++) {
+      if (i !== 0 && i !== totalPages - 1) result.push(i);
+    }
+    if (end < totalPages - 2) result.push('…');
+    if (totalPages > 1) result.push(totalPages - 1);
+    // Deduplicate consecutive duplicates (can happen near edges)
+    return result.filter((v, i, a) => (i === 0 ? true : v !== a[i - 1]));
+  };
+
+  const pagesToShow = useMemo(() => pageRange(pages, page), [pages, page]);
+  const goto = (n: number) => setPage(Math.max(0, Math.min(pages - 1, n)));
+  const [gotoInput, setGotoInput] = useState("");
+  const gotoInputEl = (
+    <div className="flex items-center gap-1">
+      <span className="text-xs opacity-70">Go to</span>
+      <input
+        className="input input-bordered input-xs w-14"
+        inputMode="numeric"
+        pattern="[0-9]*"
+        placeholder={`${page + 1}`}
+        value={gotoInput}
+        onChange={(e) => setGotoInput(e.target.value.replace(/[^0-9]/g, ''))}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            const n = Number(gotoInput);
+            if (Number.isFinite(n) && n >= 1) goto(n - 1);
+            setGotoInput("");
+          }
+        }}
+      />
+    </div>
+  );
+
   return (
     <div className="panel">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
         <div>
           <strong>{total.toLocaleString()}</strong> results • Page {page + 1} /{" "}
           {pages}
         </div>
-        <div className="flex gap-2">
-          <button
-            className="btn btn-sm btn-ghost"
-            onClick={() => setPage(Math.max(0, page - 1))}
-            disabled={page === 0}
-          >
-            Prev
-          </button>
-          <button
-            className="btn btn-sm btn-ghost"
-            onClick={() => setPage(Math.min(pages - 1, page + 1))}
-            disabled={page >= pages - 1}
-          >
-            Next
-          </button>
+        <div className="flex items-center gap-3 flex-wrap">
+          {PageSizeControl}
+          {/* Numbered pagination */}
+          <div className="flex items-center gap-1">
+            <div className="join">
+              <button className="btn btn-xs join-item" onClick={() => goto(0)} disabled={page === 0}>&laquo;</button>
+              {pagesToShow.map((p, idx) =>
+                p === '…' ? (
+                  <button key={`ellipsis-${idx}`} className="btn btn-xs join-item" disabled>…</button>
+                ) : (
+                  <button
+                    key={p}
+                    className={`btn btn-xs join-item ${p === page ? 'btn-active' : ''}`}
+                    onClick={() => goto(p as number)}
+                  >
+                    {(p as number) + 1}
+                  </button>
+                )
+              )}
+              <button className="btn btn-xs join-item" onClick={() => goto(pages - 1)} disabled={page >= pages - 1}>&raquo;</button>
+            </div>
+          </div>
+          {gotoInputEl}
+          <div className="flex gap-2">
+            <button className="btn btn-sm btn-ghost" onClick={() => setPage(0)} disabled={page === 0}>First</button>
+            <button className="btn btn-sm btn-ghost" onClick={() => setPage(Math.max(0, page - 1))} disabled={page === 0}>Prev</button>
+            <button className="btn btn-sm btn-ghost" onClick={() => setPage(Math.min(pages - 1, page + 1))} disabled={page >= pages - 1}>Next</button>
+            <button className="btn btn-sm btn-ghost" onClick={() => setPage(pages - 1)} disabled={page >= pages - 1}>Last</button>
+          </div>
         </div>
       </div>
 
       {/* Mobile: stacked cards for best readability */}
       {isMobile && (
         <div className="mt-3 space-y-2">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <select
               className="select select-bordered select-sm"
               value={(sort?.key as string) || "id"}
@@ -130,6 +258,34 @@ export default function VulnList() {
             >
               {sort?.dir === "desc" ? "Desc" : "Asc"}
             </button>
+            {PageSizeControl}
+            <div className="flex gap-2 ml-auto">
+              {/* Compact numbered pagination on mobile */}
+              <div className="flex items-center gap-1">
+                <div className="join">
+                  <button className="btn btn-xs join-item" onClick={() => goto(0)} disabled={page === 0}>&laquo;</button>
+                  {pagesToShow.map((p, idx) =>
+                    p === '…' ? (
+                      <button key={`m-ellipsis-${idx}`} className="btn btn-xs join-item" disabled>…</button>
+                    ) : (
+                      <button
+                        key={`m-${p}`}
+                        className={`btn btn-xs join-item ${p === page ? 'btn-active' : ''}`}
+                        onClick={() => goto(p as number)}
+                      >
+                        {(p as number) + 1}
+                      </button>
+                    )
+                  )}
+                  <button className="btn btn-xs join-item" onClick={() => goto(pages - 1)} disabled={page >= pages - 1}>&raquo;</button>
+                </div>
+              </div>
+              {gotoInputEl}
+              <button className="btn btn-sm btn-ghost" onClick={() => setPage(0)} disabled={page === 0}>First</button>
+              <button className="btn btn-sm btn-ghost" onClick={() => setPage(Math.max(0, page - 1))} disabled={page === 0}>Prev</button>
+              <button className="btn btn-sm btn-ghost" onClick={() => setPage(Math.min(pages - 1, page + 1))} disabled={page >= pages - 1}>Next</button>
+              <button className="btn btn-sm btn-ghost" onClick={() => setPage(pages - 1)} disabled={page >= pages - 1}>Last</button>
+            </div>
           </div>
           {rows.map((v) => (
             <div key={v.id} className="card bg-base-200">
@@ -177,7 +333,7 @@ export default function VulnList() {
 
       {/* Desktop: table or virtual list for large datasets */}
       {!isMobile && (
-        <div className="overflow-x-auto mt-3">
+        <div className="mt-3">
           {useTable ? (
             <table className="table table-zebra table-auto w-full">
               <thead>{headerRow}</thead>
@@ -192,7 +348,7 @@ export default function VulnList() {
                         onChange={() => toggleSelect(v)}
                       />
                     </td>
-                    <td className="w-[200px]">
+                    <td className="w-[140px] whitespace-nowrap">
                       <button
                         className="btn btn-ghost btn-xs"
                         onClick={() => nav(`/vuln/${encodeURIComponent(v.id)}`)}
@@ -200,37 +356,43 @@ export default function VulnList() {
                         {v.id}
                       </button>
                     </td>
-                    <td className="max-w-[420px] truncate">{v.title}</td>
-                    <td className="w-[120px]">
+                    <td className="align-middle">
+                      <div className="truncate max-w-[260px] md:max-w-[420px]">{v.title}</div>
+                    </td>
+                    <td className="w-[90px]">
                       <SeverityBadge s={v.severity} />
                     </td>
-                    <td className="w-[160px]">
+                    <td className="hidden lg:table-cell w-[120px]">
                       {v.published?.slice(0, 10) ?? "-"}
                     </td>
-                    <td className="w-[80px]">{v.cvss ?? "-"}</td>
-                    <td className="w-[200px]">{v.kaiStatus ?? "-"}</td>
+                    <td className="hidden lg:table-cell w-[60px]">{v.cvss ?? "-"}</td>
+                    <td className="hidden xl:table-cell w-[160px]">{v.kaiStatus ?? "-"}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           ) : (
             <div>
-              <div className="list-row" style={{ fontWeight: 600 }}>
-                <div style={{ width: 40 }} />
-                {headers.map((h) => (
-                  <div
-                    key={h.key as string}
-                    style={{ width: h.width, cursor: "pointer" }}
-                    onClick={() => setSort(nextSort(sort, h.key))}
-                  >
-                    {h.label}{" "}
-                    {sort?.key === h.key
-                      ? sort.dir === "asc"
-                        ? "▲"
-                        : "▼"
-                      : ""}
-                  </div>
-                ))}
+              <div className="list-row font-semibold">
+                <div className="w-10" />
+                <div className="w-[140px] truncate cursor-pointer" onClick={() => setSort(nextSort(sort, 'id'))}>
+                  ID {sort?.key === 'id' ? (sort.dir === 'asc' ? '▲' : '▼') : ''}
+                </div>
+                <div className="flex-1 min-w-0 truncate cursor-pointer" onClick={() => setSort(nextSort(sort, 'title'))}>
+                  Title {sort?.key === 'title' ? (sort.dir === 'asc' ? '▲' : '▼') : ''}
+                </div>
+                <div className="w-[90px] cursor-pointer" onClick={() => setSort(nextSort(sort, 'severity'))}>
+                  Severity {sort?.key === 'severity' ? (sort.dir === 'asc' ? '▲' : '▼') : ''}
+                </div>
+                <div className="hidden lg:block w-[120px] cursor-pointer" onClick={() => setSort(nextSort(sort, 'published'))}>
+                  Published {sort?.key === 'published' ? (sort.dir === 'asc' ? '▲' : '▼') : ''}
+                </div>
+                <div className="hidden lg:block w-[60px] cursor-pointer" onClick={() => setSort(nextSort(sort, 'cvss'))}>
+                  CVSS {sort?.key === 'cvss' ? (sort.dir === 'asc' ? '▲' : '▼') : ''}
+                </div>
+                <div className="hidden xl:block w-[160px] cursor-pointer" onClick={() => setSort(nextSort(sort, 'kaiStatus'))}>
+                  kaiStatus {sort?.key === 'kaiStatus' ? (sort.dir === 'asc' ? '▲' : '▼') : ''}
+                </div>
               </div>
               <VirtualList
                 items={rows}
@@ -268,30 +430,17 @@ function Row({
 }) {
   return (
     <>
-      <div style={{ width: 40 }}>
+      <div className="w-10">
         <input type="checkbox" checked={selected} onChange={onSelect} />
       </div>
-      <div style={{ width: 200 }}>
-        <button className="btn btn-ghost btn-xs" onClick={onOpen}>
-          {v.id}
-        </button>
+      <div className="w-[140px] truncate">
+        <button className="btn btn-ghost btn-xs" onClick={onOpen}>{v.id}</button>
       </div>
-      <div
-        style={{
-          width: 420,
-          overflow: "hidden",
-          textOverflow: "ellipsis",
-          whiteSpace: "nowrap",
-        }}
-      >
-        {v.title}
-      </div>
-      <div style={{ width: 120 }}>
-        <SeverityBadge s={v.severity} />
-      </div>
-      <div style={{ width: 160 }}>{v.published?.slice(0, 10) ?? "-"}</div>
-      <div style={{ width: 80 }}>{v.cvss ?? "-"}</div>
-      <div style={{ width: 200 }}>{v.kaiStatus ?? "-"}</div>
+      <div className="flex-1 min-w-0 truncate">{v.title}</div>
+      <div className="w-[90px]"><SeverityBadge s={v.severity} /></div>
+      <div className="hidden lg:block w-[120px]">{v.published?.slice(0, 10) ?? '-'}</div>
+      <div className="hidden lg:block w-[60px]">{v.cvss ?? '-'}</div>
+      <div className="hidden xl:block w-[160px]">{v.kaiStatus ?? '-'}</div>
     </>
   );
 }
@@ -307,7 +456,12 @@ function SeverityBadge({ s }: { s: Vulnerability["severity"] }) {
       : s === "low"
       ? "sev-low"
       : "";
-  return <span className={`badge ${cls}`}>{s}</span>;
+  // Normalize badge footprint so all severities take the same width
+  return (
+    <span className={`badge ${cls} inline-flex items-center justify-center w-[72px] text-xs capitalize whitespace-nowrap`}>
+      {s}
+    </span>
+  );
 }
 
 function nextSort(current: SortSpec, key: keyof Vulnerability) {

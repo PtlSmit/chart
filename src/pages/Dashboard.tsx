@@ -10,27 +10,25 @@ import SeverityChart from "@/charts/SeverityChart";
 import RiskFactorsChart from "@/charts/RiskFactorsChart";
 import TrendChart from "@/charts/TrendChart";
 import AIManualRelationChart from "@/charts/AIManualRelationChart";
+import { headExists, getDefaultVulnsEndpoint } from "@/services/dataService";
 
 export default function Dashboard() {
   const { summary, loadFromUrl, loading, progressBytes, ingestedCount, error } =
     useData();
-  const [url, setUrl] = useState("/uiDemoData.json");
+  const [url, setUrl] = useState<string>(() => getDefaultVulnsEndpoint());
   const [autoLoaded, setAutoLoaded] = useState(false);
 
   useEffect(() => {
     if (!autoLoaded) {
-      // Auto-load local copy only if it exists (avoid showing global loading banner on 404)
+      // Prefer API endpoint; fallback to demo JSON if present
       const checkAndLoad = async () => {
-        try {
-          const res = await fetch("/uiDemoData.json", { method: "HEAD" });
-          if (res.ok) {
-            loadFromUrl("/uiDemoData.json");
-          }
-        } catch {
-          // ignore — demo file not present
-        } finally {
-          setAutoLoaded(true);
+        const api = getDefaultVulnsEndpoint();
+        if (await headExists(api)) {
+          loadFromUrl(api);
+        } else if (await headExists('/uiDemoData.json')) {
+          loadFromUrl('/uiDemoData.json');
         }
+        setAutoLoaded(true);
       };
       checkAndLoad();
     }
@@ -76,7 +74,7 @@ export default function Dashboard() {
       <PreferencesDrawer />
 
       {summary && (
-        <div className="grid gap-4 grid-cols-1 md:grid-cols-2 xl:grid-cols-3">
+        <div className="grid gap-4 grid-cols-1 md:grid-cols-2 xl:grid-cols-2 2xl:grid-cols-2">
           <SeverityChart />
           <RiskFactorsChart />
           <TrendChart />

@@ -15,8 +15,9 @@
   --chip:#1c2531;
 }
 *{box-sizing:border-box}
-html,body,#root{height:100%}
-body{margin:0;font-family:Inter, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Helvetica Neue, Arial, "Apple Color Emoji","Segoe UI Emoji";background:var(--bg);color:var(--fg)}
+html,body,#root{height:100%;max-width:100%;overflow-x:hidden}
+body{margin:0;font-family:Inter, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Helvetica Neue, Arial, "Apple Color Emoji","Segoe UI Emoji";background:var(--bg);color:var(--fg);max-width:100%;overflow-x:hidden}
+.app-shell,.app-main{max-width:100%;overflow-x:hidden}
 .app-header{display:flex;align-items:center;gap:.75rem;padding:.75rem 1rem;background:var(--panel);border-bottom:1px solid #222}
 .brand{color:var(--fg);text-decoration:none;font-weight:700}
 .spacer{flex:1}
@@ -24,7 +25,7 @@ body{margin:0;font-family:Inter, system-ui, -apple-system, Segoe UI, Roboto, Ubu
 .app-main{padding:1rem;}
 .row{display:flex;gap:1rem}
 .col{display:flex;flex-direction:column;gap:1rem}
-.panel{background:var(--panel);border:1px solid #1a222e;border-radius:10px;padding:1rem}
+.panel{background:var(--panel);border:1px solid #1a222e;border-radius:10px;padding:1rem;max-width:100%;overflow-x:hidden}
 .banner{padding:.5rem 1rem;margin:.5rem 1rem;border-radius:8px}
 .banner.loading{background:#0d1520;color:var(--muted)}
 .banner.error{background:#290e12;color:#ffb3bf;border:1px solid #3b1017}
@@ -40,7 +41,7 @@ input, select{background:#0d141d;border:1px solid #263243;color:var(--fg);border
 .grid.cols-3{grid-template-columns:1fr 1fr 1fr}
 .tiny{font-size:.8rem;color:var(--muted)}
 .list{height:60vh;overflow:auto;border:1px solid #1a222e;border-radius:10px;background:var(--panel-2)}
-.list-row{display:flex;gap:1rem;padding:.5rem .75rem;border-bottom:1px solid #15202c}
+.list-row{display:flex;gap:1rem;padding:.5rem .75rem;border-bottom:1px solid #15202c;overflow-x:hidden}
 .list-row:hover{background:#101824}
 .badge{padding:.15rem .4rem;border-radius:6px;font-size:.7rem}
 .sev-critical{background:#4d0a18;color:#ff9db0;border:1px solid #6e0e22}
@@ -50,3 +51,8 @@ input, select{background:#0d141d;border:1px solid #263243;color:var(--fg);border
 .progress{height:10px;background:#0f151e;border:1px solid #1c2634;border-radius:999px;overflow:hidden}
 .progress > div{height:100%;background:var(--accent)}
 .hint{color:var(--muted)}
+
+/* Prevent wide content from causing horizontal scroll */
+pre{white-space:pre-wrap;word-wrap:break-word;max-width:100%;overflow:auto}
+table{table-layout:fixed;width:100%}
+img,svg,canvas,iframe{max-width:100%;height:auto}

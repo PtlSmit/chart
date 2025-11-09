@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useData } from '@/context/DataContext';
 import type { Vulnerability } from '@/types/vuln';
+import { getDefaultVulnsEndpoint } from '@/services/dataService';
 
 export default function VulnDetail() {
   const { id } = useParams();
@@ -11,9 +12,22 @@ export default function VulnDetail() {
   useEffect(() => {
     let mounted = true;
     (async () => {
-      if (!repo || !id) return;
-      const res = await repo.query({ query: id, severity: new Set(), riskFactors: new Set(), kaiStatusExclude: new Set() }, 0, 1);
-      if (mounted) setV(res[0] ?? null);
+      if (!id) return;
+      // Prefer direct API lookup by id; fallback to repository query if needed
+      try {
+        const base = getDefaultVulnsEndpoint().replace(/\/?vulns\/?$/, '');
+        const resp = await fetch(`${base}/vulns/${encodeURIComponent(id)}`);
+        if (resp.ok) {
+          const item = (await resp.json()) as Vulnerability;
+          if (mounted) setV(item);
+          return;
+        }
+      } catch {}
+      // Fallback: query via repo
+      if (repo) {
+        const res = await repo.query({ query: id, severity: new Set(), riskFactors: new Set(), kaiStatusExclude: new Set() }, 0, 1);
+        if (mounted) setV(res[0] ?? null);
+      }
     })();
     return () => { mounted = false; };
   }, [repo, id]);
@@ -55,4 +69,3 @@ export default function VulnDetail() {
     </div>
   );
 }
-

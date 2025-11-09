@@ -7,16 +7,12 @@ import React, {
   useRef,
   useState,
 } from "react";
-import WorkerCtor from "@/workers/jsonStream.worker.ts?worker";
-import type { WorkerOutMsg } from "@/types/worker";
+// streaming worker removed in page-based remote mode
 import type { Filters, Preferences, SummaryMetrics, Vulnerability } from "@/types/vuln";
 import type { SortSpec } from "@/types/common";
 import type { DataState } from "@/types/context";
-import {
-  IndexedDBRepository,
-  MemoryRepository,
-  type DataRepository,
-} from "@/data/repository";
+import { type DataRepository, RemoteRepository } from "@/data/repository";
+import { getDefaultVulnsEndpoint } from "@/services/dataService";
 
 // Types moved to src/types/common.ts and src/types/context.ts
 
@@ -53,9 +49,6 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     const raw = localStorage.getItem("vuln:prefs");
     return raw ? { ...defaultPrefs, ...JSON.parse(raw) } : defaultPrefs;
   });
-  const workerRef = useRef<Worker | null>(null);
-  const loadedBytes = useRef(0);
-  const usingIndexedDB = useRef(false);
   const lastUrlRef = useRef<string | null>(null);
   // Throttled refresh controls for incremental updates
   const refreshTimerRef = useRef<number | null>(null);
@@ -158,136 +151,28 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     refresh();
   }, [filters, page, pageSize, sort]);
 
-  const createFreshWorker = () => {
-    // Always start with a fresh worker to avoid queuing a new job behind a long-running one
-    // and to ensure listeners/state are clean per load action.
-    if (workerRef.current) {
-      try {
-        workerRef.current.terminate();
-      } catch {}
-    }
-    // Vite `?worker` import provides a Worker constructor that's bundler-safe in dev and build
-    const w = new WorkerCtor();
-    workerRef.current = w;
-    return w;
-  };
+  // no worker in remote/page-based mode
 
-  const maybeSwitchToIndexedDB = (bytesLoaded: number) => {
-    if (!usingIndexedDB.current && bytesLoaded > 120 * 1024 * 1024) {
-      // threshold ~120MB
-      usingIndexedDB.current = true;
-      // migrate from memory to IndexedDB for scalability
-      (async () => {
-        if (!repo) return;
-        const memRepo = repo as MemoryRepository;
-        const idb = new IndexedDBRepository();
-        const count = await memRepo.count();
-        if (count > 0) {
-          // naive migration: re-query all
-          const all = await memRepo.query(
-            defaultFilters,
-            0,
-            Number.MAX_SAFE_INTEGER
-          );
-          await idb.addMany(all);
-        }
-        setRepo(idb);
-      })();
-    }
-  };
+  // no indexedDB migration in remote mode
+  const maybeSwitchToIndexedDB = (_bytesLoaded: number) => {};
 
-  const handleWorker = useCallback(() => {
-    const w = createFreshWorker();
-    console.debug("[Data] Starting load; resetting state");
+  // no worker handler in remote mode
+  const handleWorker = useCallback(() => null, []);
+
+  const loadFromUrl = useCallback(async (url: string) => {
+    // derive API base (accept either base '/api/v1' or '/api/v1/vulns')
+    const base = url.replace(/\/?vulns\/?$/, '');
+    repoRef.current = new RemoteRepository(base || getDefaultVulnsEndpoint().replace(/\/?vulns\/?$/, ''));
+    setRepo(repoRef.current);
+    lastUrlRef.current = base;
     setLoading(true);
     setError(null);
-    setSummary(null);
-    setResults([]);
-    setTotal(0);
-    setProgressBytes(0);
-    setIngestedCount(0);
-    loadedBytes.current = 0;
-    usingIndexedDB.current = false;
-    repoRef.current = new MemoryRepository();
-    setRepo(repoRef.current);
-    // reset throttling state
-    if (refreshTimerRef.current != null) {
-      clearTimeout(refreshTimerRef.current);
-      refreshTimerRef.current = null;
+    try {
+      await refresh();
+    } finally {
+      setLoading(false);
     }
-    lastRefreshAtRef.current = 0;
-    const handleMessage = async (ev: MessageEvent<WorkerOutMsg>) => {
-      const data = ev.data;
-      if (data.type === "progress") {
-        loadedBytes.current = data.bytes;
-        setProgressBytes(data.bytes);
-        maybeSwitchToIndexedDB(loadedBytes.current);
-      } else if (data.type === "log") {
-        console.debug("[Worker]", data.message);
-      } else if (data.type === "items") {
-        const items = data.items as Vulnerability[];
-        setIngestedCount((n) => n + items.length);
-        // write to whichever repo is current
-        if (usingIndexedDB.current) {
-          const idb =
-            repoRef.current instanceof IndexedDBRepository
-              ? repoRef.current
-              : new IndexedDBRepository();
-          await idb.addMany(items);
-          repoRef.current = idb;
-          setRepo(idb);
-        } else if (repoRef.current) {
-          await repoRef.current.addMany(items);
-        }
-        // trigger an incremental UI refresh (throttled)
-        scheduleRefresh();
-      } else if (data.type === "done") {
-        console.debug(
-          "[Data] Load done. Bytes:",
-          loadedBytes.current,
-          "Items ingested:",
-          ingestedCount
-        );
-        setLoading(false);
-        // final refresh to show complete results immediately
-        if (refreshTimerRef.current != null) {
-          clearTimeout(refreshTimerRef.current);
-          refreshTimerRef.current = null;
-        }
-        await refresh();
-        w.onmessage = null;
-      } else if (data.type === "error") {
-        console.error("[Data] Load error:", data.error);
-        setLoading(false);
-        let msg = data.error as string;
-        const last = lastUrlRef.current;
-        if (msg && msg.toLowerCase().includes("failed to fetch") && last) {
-          try {
-            const u = new URL(last);
-            if (u.hostname === "github.com" && u.pathname.includes("/blob/")) {
-              msg =
-                'Failed to fetch. Tip: GitHub "blob" URLs are not fetchable due to CORS. Use the raw URL instead (raw.githubusercontent.com) or upload the file.';
-            }
-          } catch {}
-        }
-        setError(msg);
-        w.onmessage = null;
-      }
-    };
-    w.onmessage = handleMessage;
-    return w;
-  }, [scheduleRefresh, refresh]);
-
-  const loadFromUrl = useCallback(
-    (url: string) => {
-      const w = handleWorker();
-      const safe = toFetchableUrl(url);
-      lastUrlRef.current = url;
-      console.debug("[Data] loadFromUrl", { url, safe });
-      w.postMessage({ type: "fetch", url: safe });
-    },
-    [handleWorker]
-  );
+  }, [refresh]);
 
   const value: DataState = useMemo(
     () => ({
@@ -341,20 +226,4 @@ export function useData() {
   return ctx;
 }
 
-function toFetchableUrl(url: string): string {
-  try {
-    const u = new URL(url);
-    if (u.hostname === "github.com" && u.pathname.includes("/blob/")) {
-      // https://github.com/{owner}/{repo}/blob/{branch}/{path} -> https://raw.githubusercontent.com/{owner}/{repo}/{branch}/{path}
-      const parts = u.pathname.split("/").filter(Boolean);
-      const owner = parts[0];
-      const repo = parts[1];
-      const branch = parts[3];
-      const rest = parts.slice(4).join("/");
-      return `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${rest}`;
-    }
-    return url;
-  } catch {
-    return url;
-  }
-}
+// toFetchableUrl moved to services/dataService
