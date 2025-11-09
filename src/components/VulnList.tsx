@@ -191,7 +191,7 @@ export default function VulnList() {
 
   return (
     <div className="panel">
-      <Controls
+      <ControlsMemo
         sort={sort}
         setSortKey={setSortKey}
         toggleSortDir={toggleSortDir}
@@ -421,6 +421,9 @@ function Controls({
     </div>
   );
 }
+
+// Memoize controls to avoid unnecessary re-renders
+const ControlsMemo = React.memo(Controls);
 
 
 function Row({

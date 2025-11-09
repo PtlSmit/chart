@@ -28,9 +28,10 @@ export default function SearchBar() {
           onChange={(e) => setLocal(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && apply(local)}
           placeholder="Search CVE id, title, description…"
+          aria-label="Search query"
         />
-        <button className="btn btn-primary" onClick={() => apply(local)}>Search</button>
-        <button className="btn btn-ghost" onClick={resetAll}>Reset All</button>
+        <button className="btn btn-primary" onClick={() => apply(local)} aria-label="Search">Search</button>
+        <button className="btn btn-ghost" onClick={resetAll} aria-label="Reset all filters">Reset All</button>
         {!!filters.query && (
           <span className="badge badge-outline">
             Query: {filters.query}
@@ -42,7 +43,7 @@ export default function SearchBar() {
         <div className="tiny mt-2">
           Suggestions:
           {suggestions.map((s) => (
-            <button key={s} className="btn btn-xs btn-ghost ml-2" onClick={() => { setLocal(s); apply(s); }}>{s}</button>
+            <button key={s} className="btn btn-xs btn-ghost ml-2" onClick={() => { setLocal(s); apply(s); }} aria-label={`Search for ${s}`}>{s}</button>
           ))}
         </div>
       )}
