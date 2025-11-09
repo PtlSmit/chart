@@ -34,18 +34,22 @@ export default function VulnList() {
 
   const headerRow = (
     <tr>
-      <th className="w-10"></th>
-      {headers.map((h) => (
-        <th key={h.key as string} className={h.className || ''}>
-          <button
-            className="btn btn-ghost btn-xs"
-            onClick={() => setSort(nextSort(sort, h.key))}
-          >
-            {h.label}{" "}
-            {sort?.key === h.key ? (sort.dir === "asc" ? "▲" : "▼") : ""}
-          </button>
-        </th>
-      ))}
+      <th className="w-10" scope="col" aria-sort="none"></th>
+      {headers.map((h) => {
+        const ariaSort = sort?.key === h.key ? (sort.dir === 'asc' ? 'ascending' : 'descending') : 'none';
+        return (
+          <th key={h.key as string} className={h.className || ''} scope="col" aria-sort={ariaSort}>
+            <button
+              className="btn btn-ghost btn-xs"
+              onClick={() => setSort(nextSort(sort, h.key))}
+              aria-label={`Sort by ${h.label}${ariaSort !== 'none' ? ` (${ariaSort})` : ''}`}
+            >
+              {h.label}{" "}
+              {sort?.key === h.key ? (sort.dir === "asc" ? "▲" : "▼") : ""}
+            </button>
+          </th>
+        );
+      })}
     </tr>
   );
 
@@ -213,10 +217,12 @@ export default function VulnList() {
                     className="checkbox checkbox-sm"
                     checked={!!selected[v.id]}
                     onChange={() => toggleSelect(v)}
+                    aria-label={`Select ${v.id}`}
                   />
                   <button
                     className="btn btn-ghost btn-xs"
                     onClick={() => nav(`/vuln/${encodeURIComponent(v.id)}`)}
+                    aria-label={`Open details for ${v.id}`}
                   >
                     {v.id}
                   </button>
@@ -250,7 +256,7 @@ export default function VulnList() {
       <div className="hidden md:block mt-3">
         {useTable ? (
           <table className="table table-zebra table-auto w-full">
-            <thead>{headerRow}</thead>
+            <thead className="sticky top-0 z-10 bg-base-200">{headerRow}</thead>
             <tbody>
               {rows.map((v) => (
                 <tr key={v.id}>
@@ -260,12 +266,14 @@ export default function VulnList() {
                       className="checkbox checkbox-sm"
                       checked={!!selected[v.id]}
                       onChange={() => toggleSelect(v)}
+                      aria-label={`Select ${v.id}`}
                     />
                   </td>
                   <td className="w-[140px] whitespace-nowrap">
                     <button
                       className="btn btn-ghost btn-xs"
                       onClick={() => nav(`/vuln/${encodeURIComponent(v.id)}`)}
+                      aria-label={`Open details for ${v.id}`}
                     >
                       {v.id}
                     </button>
@@ -360,11 +368,13 @@ function Controls({
       <div className="md:hidden flex items-center gap-2">
         <select
           className="select select-bordered select-sm"
-          value={(sort?.key as string) || "id"}
+          aria-label="Sort key"
+          value={(sort?.key as string) || ""}
           onChange={(e) =>
             setSortKey(e.target.value as keyof Vulnerability)
           }
         >
+          <option value="" disabled>Sort by…</option>
           {SORT_KEYS.map((s) => (
             <option key={s.key as string} value={s.key as string}>
               {s.label}
@@ -375,6 +385,7 @@ function Controls({
           className="btn btn-sm btn-ghost"
           onClick={toggleSortDir}
           disabled={!sort}
+          aria-label="Toggle sort direction"
         >
           {sort?.dir === "desc" ? "Desc" : "Asc"}
         </button>
@@ -382,21 +393,22 @@ function Controls({
       {PageSizeControl}
       <div className="flex items-center gap-1">
         <div className="join">
-          <button className="btn btn-xs join-item" onClick={() => goto(0)} disabled={page === 0}>&laquo;</button>
+          <button className="btn btn-xs join-item" onClick={() => goto(0)} disabled={page === 0} aria-label="Go to first page">&laquo;</button>
           {pagesToShow.map((p, idx) =>
             p === '…' ? (
-              <button key={`ellipsis-${idx}`} className="btn btn-xs join-item" disabled>…</button>
+              <button key={`ellipsis-${idx}`} className="btn btn-xs join-item" disabled aria-label="Ellipsis">…</button>
             ) : (
               <button
                 key={p}
                 className={`btn btn-xs join-item ${p === page ? 'btn-active' : ''}`}
                 onClick={() => goto(p as number)}
+                aria-label={`Go to page ${(p as number) + 1}`}
               >
                 {(p as number) + 1}
               </button>
             )
           )}
-          <button className="btn btn-xs join-item" onClick={() => goto(pages - 1)} disabled={page >= pages - 1}>&raquo;</button>
+          <button className="btn btn-xs join-item" onClick={() => goto(pages - 1)} disabled={page >= pages - 1} aria-label="Go to last page">&raquo;</button>
         </div>
       </div>
       {gotoInputEl}
@@ -425,10 +437,10 @@ function Row({
   return (
     <>
       <div className="w-10">
-        <input type="checkbox" checked={selected} onChange={onSelect} />
+        <input type="checkbox" checked={selected} onChange={onSelect} aria-label={`Select ${v.id}`} />
       </div>
       <div className="w-[140px] truncate">
-        <button className="btn btn-ghost btn-xs" onClick={onOpen}>{v.id}</button>
+        <button className="btn btn-ghost btn-xs" onClick={onOpen} aria-label={`Open details for ${v.id}`}>{v.id}</button>
       </div>
       <div className="flex-1 min-w-0 truncate">{v.title}</div>
       <div className="w-[90px]"><SeverityBadge s={v.severity} /></div>
