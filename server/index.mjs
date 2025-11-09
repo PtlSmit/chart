@@ -90,6 +90,10 @@ loadData();
 const app = express();
 app.use(cors());
 app.get('/health', (_req, res) => res.json({ ok: true }));
+// Explicit HEAD handlers to support availability probes
+app.head('/health', (_req, res) => res.sendStatus(200));
+app.head(`${API_BASE}/summary`, (_req, res) => res.sendStatus(200));
+app.head(`${API_BASE}/vulns`, (_req, res) => res.sendStatus(200));
 
 const applyFilters = (arr, q) => {
   const query = String(q.query ?? '').trim().toLowerCase();
@@ -146,6 +150,7 @@ const summarize = (arr) => {
 };
 
 // Routes
+const ALLOWED_SORT_KEYS = new Set(['id', 'title', 'severity', 'published', 'cvss', 'kaiStatus', 'vendor', 'product', 'source']);
 app.get(`${API_BASE}/summary`, (_req, res) => {
   res.json(summarize(DATA_CACHE));
 });
@@ -161,6 +166,12 @@ app.get(`${API_BASE}/vulns`, (req, res) => {
   const { offset = '0', limit = '50', sortKey, sortDir } = req.query;
   const off = Number(offset) || 0;
   const lim = Math.min(Math.max(Number(limit) || 50, 1), 1000);
+  if (sortKey && !ALLOWED_SORT_KEYS.has(String(sortKey))) {
+    return res.status(400).json({ error: 'invalid sortKey', allowed: Array.from(ALLOWED_SORT_KEYS) });
+  }
+  if (sortDir && !(String(sortDir) === 'asc' || String(sortDir) === 'desc')) {
+    return res.status(400).json({ error: 'invalid sortDir', allowed: ['asc', 'desc'] });
+  }
   const filtered = applyFilters(DATA_CACHE, req.query);
   const total = filtered.length;
   const sorted = sortItems(filtered, sortKey, sortDir);
@@ -171,4 +182,3 @@ app.get(`${API_BASE}/vulns`, (req, res) => {
 app.listen(PORT, () => {
   console.log(`[server] API listening on http://localhost:${PORT}${API_BASE}`);
 });
-
