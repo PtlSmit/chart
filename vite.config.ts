@@ -66,9 +66,26 @@ export default defineConfig({
         const sortItems = (arr: any[], key?: string, dir?: string) => {
           if (!key) return arr; // If no key is provided, return the array as is.
           const d = dir === "desc" ? -1 : 1; // Determine sort direction multiplier.
+          const sevRank: Record<string, number> = { unknown: 0, low: 1, medium: 2, high: 3, critical: 4 };
           return arr.slice().sort((a, b) => {
-            const av = a[key as any];
-            const bv = b[key as any];
+            const av = (a as any)[key as any];
+            const bv = (b as any)[key as any];
+            if (key === 'severity') {
+              const ar = sevRank[String(av ?? 'unknown').toLowerCase()] ?? 0;
+              const br = sevRank[String(bv ?? 'unknown').toLowerCase()] ?? 0;
+              if (ar < br) return -1 * d;
+              if (ar > br) return 1 * d;
+              return 0;
+            }
+            if (key === 'cvss') {
+              const af = typeof av === 'number' ? av : (av == null ? NaN : parseFloat(String(av)));
+              const bf = typeof bv === 'number' ? bv : (bv == null ? NaN : parseFloat(String(bv)));
+              const ax = Number.isNaN(af) ? -Infinity : af;
+              const bx = Number.isNaN(bf) ? -Infinity : bf;
+              if (ax < bx) return -1 * d;
+              if (ax > bx) return 1 * d;
+              return 0;
+            }
             // Numeric comparison
             if (typeof av === "number" && typeof bv === "number")
               return (av - bv) * d;

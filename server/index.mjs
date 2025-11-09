@@ -121,9 +121,28 @@ const applyFilters = (arr, q) => {
 const sortItems = (arr, key, dir) => {
   if (!key) return arr;
   const d = dir === 'desc' ? -1 : 1;
+  const sevRank = { unknown: 0, low: 1, medium: 2, high: 3, critical: 4 };
   return arr.slice().sort((a, b) => {
     const av = a[key];
     const bv = b[key];
+    // Domain-specific sorts
+    if (key === 'severity') {
+      const ar = sevRank[String(av || 'unknown').toLowerCase()] ?? 0;
+      const br = sevRank[String(bv || 'unknown').toLowerCase()] ?? 0;
+      if (ar < br) return -1 * d;
+      if (ar > br) return 1 * d;
+      return 0;
+    }
+    if (key === 'cvss') {
+      const af = typeof av === 'number' ? av : (av == null ? NaN : parseFloat(String(av)));
+      const bf = typeof bv === 'number' ? bv : (bv == null ? NaN : parseFloat(String(bv)));
+      const ax = Number.isNaN(af) ? -Infinity : af;
+      const bx = Number.isNaN(bf) ? -Infinity : bf;
+      if (ax < bx) return -1 * d;
+      if (ax > bx) return 1 * d;
+      return 0;
+    }
+    // Generic sorts
     if (typeof av === 'number' && typeof bv === 'number') return (av - bv) * d;
     const as = av == null ? '' : String(av);
     const bs = bv == null ? '' : String(bv);
