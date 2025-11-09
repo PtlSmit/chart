@@ -102,6 +102,72 @@ export class MemoryRepository implements DataRepository {
   }
 }
 
+// Remote repository backed by HTTP API (page-based)
+export class RemoteRepository implements DataRepository {
+  constructor(private base: string = '/api/v1') {}
+
+  async addMany(_items: Vulnerability[]): Promise<void> {
+    // no-op for remote
+  }
+
+  private buildParams(filters: Filters, offset: number, limit: number, sort?: { key: keyof Vulnerability; dir: 'asc' | 'desc' }) {
+    const p = new URLSearchParams();
+    if (filters.query) p.set('query', filters.query);
+    if (filters.severity && filters.severity.size) p.set('severity', Array.from(filters.severity).join(','));
+    if (filters.riskFactors && filters.riskFactors.size) p.set('riskFactors', Array.from(filters.riskFactors).join(','));
+    if (filters.kaiStatusExclude && filters.kaiStatusExclude.size) p.set('kaiStatusExclude', Array.from(filters.kaiStatusExclude).join(','));
+    if (filters.dateFrom) p.set('dateFrom', filters.dateFrom);
+    if (filters.dateTo) p.set('dateTo', filters.dateTo);
+    p.set('offset', String(offset));
+    p.set('limit', String(limit));
+    if (sort?.key) p.set('sortKey', String(sort.key));
+    if (sort?.dir) p.set('sortDir', sort.dir);
+    return p;
+  }
+
+  private vulnsUrl() { return this.base.replace(/\/$/, '') + '/vulns'; }
+  private summaryUrl() { return this.base.replace(/\/$/, '') + '/summary'; }
+
+  async count(filters?: Filters): Promise<number> {
+    const f = filters ?? { query: '', severity: new Set(), riskFactors: new Set(), kaiStatusExclude: new Set() } as Filters;
+    const params = this.buildParams(f, 0, 0);
+    const res = await fetch(this.vulnsUrl() + '?' + params.toString());
+    if (!res.ok) {
+      const errorBody = await res.json().catch(() => null);
+      const errorMessage = errorBody?.message || res.statusText || `HTTP error! status: ${res.status}`;
+      throw new Error(`Failed to fetch count: ${errorMessage}`);
+    }
+    const json: any = await res.json();
+    return Number(json.total || 0);
+  }
+
+  async query(filters: Filters, offset: number, limit: number, sort?: { key: keyof Vulnerability; dir: 'asc' | 'desc' }): Promise<Vulnerability[]> {
+    const params = this.buildParams(filters, offset, limit, sort);
+    const res = await fetch(this.vulnsUrl() + '?' + params.toString());
+    if (!res.ok) {
+      const errorBody = await res.json().catch(() => null);
+      const errorMessage = errorBody?.message || res.statusText || `HTTP error! status: ${res.status}`;
+      throw new Error(`Failed to fetch vulnerabilities: ${errorMessage}`);
+    }
+    const json: any = await res.json();
+    return (json.results || []) as Vulnerability[];
+  }
+
+  async summarize(): Promise<SummaryMetrics> {
+    const res = await fetch(this.summaryUrl());
+    if (!res.ok) {
+      const errorBody = await res.json().catch(() => null);
+      const errorMessage = errorBody?.message || res.statusText || `HTTP error! status: ${res.status}`;
+      throw new Error(`Failed to fetch summary: ${errorMessage}`);
+    }
+    return (await res.json()) as SummaryMetrics;
+  }
+
+  async clear(): Promise<void> {
+    // no-op for remote
+  }
+}
+
 // Minimal IndexedDB repo for very large datasets
 export class IndexedDBRepository implements DataRepository {
   private dbp: Promise<IDBDatabase>;
