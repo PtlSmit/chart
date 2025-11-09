@@ -3,6 +3,7 @@ import react from "@vitejs/plugin-react";
 import fs from "node:fs";
 import path from "node:path";
 import { normalizeVuln, monthKey } from "./src/data/normalize";
+import type { Vulnerability, Severity } from "./src/types/vuln";
 
 export default defineConfig({
   plugins: [
@@ -11,10 +12,13 @@ export default defineConfig({
       name: "mock-api-v1",
       configureServer(server) {
         const ALLOWED_SORT_KEYS = new Set(['id', 'title', 'severity', 'published', 'cvss', 'kaiStatus', 'vendor', 'product', 'source']);
-        let cache: any[] | null = null;
+        let cache: Vulnerability[] | null = null;
+
+        // Define a type for the raw vulnerability data to avoid using 'any'.
+        type RawVulnerability = Record<string, unknown>;
+
         // Filters an array of vulnerabilities based on query parameters.
-        // Supports filtering by text query, severity, risk factors, excluded Kai status, and date ranges.
-        const applyFilters = (arr: any[], q: any) => {
+        const applyFilters = (arr: Vulnerability[], q: Record<string, string>) => {
           const query = String(q.query ?? "")
             .trim()
             .toLowerCase();
@@ -62,13 +66,12 @@ export default defineConfig({
           });
         };
         // Sorts an array of items based on a given key and direction.
-        // Supports numeric and string comparisons.
-        const sortItems = (arr: any[], key?: string, dir?: string) => {
+        const sortItems = (arr: Vulnerability[], key?: string, dir?: string) => {
           if (!key) return arr; // If no key is provided, return the array as is.
           const d = dir === "desc" ? -1 : 1; // Determine sort direction multiplier.
           return arr.slice().sort((a, b) => {
-            const av = a[key as any];
-            const bv = b[key as any];
+            const av = a[key as keyof Vulnerability];
+            const bv = b[key as keyof Vulnerability];
             // Numeric comparison
             if (typeof av === "number" && typeof bv === "number")
               return (av - bv) * d;
@@ -81,18 +84,17 @@ export default defineConfig({
           });
         };
         // Calculates summary metrics for a given array of vulnerabilities.
-        // Returns counts for severity, risk factors, published by month, and Kai status.
-        const summarize = (arr: any[]) => {
-          const severityCounts: any = {
+        const summarize = (arr: Vulnerability[]) => {
+          const severityCounts: Record<Severity, number> = {
             critical: 0,
             high: 0,
             medium: 0,
             low: 0,
             unknown: 0,
           };
-          const riskFactorCounts: any = {};
-          const publishedByMonth: any = {};
-          const kaiStatusCounts: any = {};
+          const riskFactorCounts: Record<string, number> = {};
+          const publishedByMonth: Record<string, number> = {};
+          const kaiStatusCounts: Record<string, number> = {};
           for (const v of arr) {
             const sev = v.severity ?? "unknown";
             severityCounts[sev] = (severityCounts[sev] ?? 0) + 1;
@@ -113,48 +115,25 @@ export default defineConfig({
             kaiStatusCounts,
           };
         };
-        const loadData = (): any[] => {
+        const loadData = (): Vulnerability[] => {
           if (cache) return cache;
           const p = path.join(process.cwd(), "public", "uiDemoData.json");
           if (!fs.existsSync(p)) {
             cache = [];
             return cache;
           }
-          const raw = fs.readFileSync(p, "utf8");
-          let parsed: any = [];
           try {
-            const obj = JSON.parse(raw);
-            if (Array.isArray(obj)) {
-              parsed = obj;
-            } else if (obj && typeof obj === 'object') {
-              // Traverse nested objects and collect any `vulnerabilities` arrays
-              const acc: any[] = [];
-              const visit = (node: any) => {
-                if (!node) return;
-                if (Array.isArray(node)) { for (const it of node) visit(it); return; }
-                if (typeof node !== 'object') return;
-                for (const [k, v] of Object.entries(node)) {
-                  if (Array.isArray(v) && k.toLowerCase() === 'vulnerabilities') acc.push(...v);
-                  else visit(v as any);
-                }
-              };
-              visit(obj);
-              parsed = acc;
-            }
-          } catch {
-            parsed = raw
-              .split(/\r?\n/)
-              .map((l) => l.trim())
-              .filter(Boolean)
-              .map((l) => {
-                try { return JSON.parse(l); } catch { return null; }
-              })
-              .filter(Boolean);
+            const raw = fs.readFileSync(p, "utf8");
+            const parsed = JSON.parse(raw) as RawVulnerability[];
+            cache = parsed
+              .map((r) => normalizeVuln(r))
+              .filter((v): v is Vulnerability => v !== null);
+            return cache;
+          } catch (e) {
+            console.error(`[server] Failed to parse data file ${p}:`, e);
+            cache = [];
+            return cache;
           }
-          cache = parsed
-            .map((r: any) => normalizeVuln(r))
-            .filter(Boolean) as any[];
-          return cache;
         };
 
         server.middlewares.use("/api/v1/summary", (req, res) => {
@@ -165,12 +144,12 @@ export default defineConfig({
         });
 
         server.middlewares.use("/api/v1/vulns", (req, res, next) => {
-          const pathname = new URL((req as any).originalUrl || req.url!, "http://localhost").pathname;
+          const pathname = new URL(req.originalUrl || req.url!, "http://localhost").pathname;
           // Delegate /api/v1/vulns/:id to the next handler
           if (pathname !== "/api/v1/vulns") return next();
           res.setHeader("Access-Control-Allow-Origin", "*");
           res.setHeader("Content-Type", "application/json");
-          const url = new URL((req as any).originalUrl || req.url!, "http://localhost");
+          const url = new URL(req.originalUrl || req.url!, "http://localhost");
           const q = Object.fromEntries(url.searchParams.entries());
           const offset = Number(q.offset || 0);
           const limit = Number(q.limit || 50);

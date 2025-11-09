@@ -134,8 +134,8 @@ export class RemoteRepository implements DataRepository {
   private async _fetch(url: string, signal?: AbortSignal): Promise<Response> {
     const res = await fetch(url, signal ? { signal } : { signal: null });
     if (!res.ok) {
-      const errorBody = await res.json().catch(() => null as any);
-      const errorMessage = (errorBody as any)?.message || res.statusText || `HTTP error! status: ${res.status}`;
+      const errorBody: { message?: string } = await res.json().catch(() => ({}));
+      const errorMessage = errorBody?.message || res.statusText || `HTTP error! status: ${res.status}`;
       throw new Error(`Failed to fetch from ${url}: ${errorMessage}`);
     }
     return res;
@@ -145,7 +145,7 @@ export class RemoteRepository implements DataRepository {
     try {
       return (await res.json()) as T;
     } catch (err) {
-      const where = (res as any)?.url || 'response';
+      const where = res.url || 'response';
       throw new Error(`Failed to parse JSON from ${where}: ${String((err as Error)?.message || err)}`);
     }
   }
