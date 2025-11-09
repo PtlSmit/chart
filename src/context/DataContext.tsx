@@ -74,9 +74,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     setPageSize(preferences.pageSize);
-    document.documentElement.dataset.theme = preferences.darkMode
-      ? "dark"
-      : "light";
+    document.documentElement.dataset.theme = preferences.darkMode ? "dark" : "light";
+    // Enable Tailwind's dark: utilities by toggling the 'dark' class on <html>
+    document.documentElement.classList.toggle('dark', preferences.darkMode);
   }, [preferences]);
 
   const setFilters = useCallback((updater: (f: Filters) => Filters) => {

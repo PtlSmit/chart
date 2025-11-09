@@ -1,6 +1,6 @@
 import React from 'react';
 import { useData } from '@/context/DataContext';
-import { BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, Cell } from 'recharts';
+import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, Cell } from 'recharts';
 
 export default function SeverityChart() {
   const { summary } = useData();
@@ -18,17 +18,19 @@ export default function SeverityChart() {
   return (
     <div className="panel">
       <div style={{ fontWeight: 600, marginBottom: '.5rem' }}>Severity Distribution</div>
-      <BarChart width={360} height={180} data={order} margin={{ top: 10, right: 10, left: 20, bottom: 20 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="#304259" vertical={false} />
-        <XAxis dataKey="name" tick={{ fontSize: 10, fill: '#9fb0c3' }} axisLine={{ stroke: '#304259' }} tickLine={{ stroke: '#304259' }} />
-        <YAxis allowDecimals={false} tick={{ fontSize: 10, fill: '#9fb0c3' }} axisLine={{ stroke: '#304259' }} tickLine={{ stroke: '#304259' }} />
-        <Tooltip formatter={(value: number) => [`${value} (${total ? Math.round((Number(value) / total) * 100) : 0}%)`, 'count']} />
-        <Bar dataKey="value" radius={[6, 6, 0, 0]}>
-          {order.map((entry, index) => (
-            <Cell key={`cell-${index}`} fill={entry.color} />
-          ))}
-        </Bar>
-      </BarChart>
+      <ResponsiveContainer width="100%" height={180}>
+        <BarChart data={order} margin={{ top: 10, right: 10, left: 20, bottom: 20 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="#304259" vertical={false} />
+          <XAxis dataKey="name" tick={{ fontSize: 10, fill: '#9fb0c3' }} axisLine={{ stroke: '#304259' }} tickLine={{ stroke: '#304259' }} />
+          <YAxis allowDecimals={false} tick={{ fontSize: 10, fill: '#9fb0c3' }} axisLine={{ stroke: '#304259' }} tickLine={{ stroke: '#304259' }} />
+          <Tooltip formatter={(value: number) => [`${value} (${total ? Math.round((Number(value) / total) * 100) : 0}%)`, 'count']} />
+          <Bar dataKey="value" radius={[6, 6, 0, 0]}>
+            {order.map((entry, index) => (
+              <Cell key={`cell-${index}`} fill={entry.color} />
+            ))}
+          </Bar>
+        </BarChart>
+      </ResponsiveContainer>
     </div>
   );
 }
