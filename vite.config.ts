@@ -10,6 +10,7 @@ export default defineConfig({
     {
       name: "mock-api-v1",
       configureServer(server) {
+        const ALLOWED_SORT_KEYS = new Set(['id', 'title', 'severity', 'published', 'cvss', 'kaiStatus', 'vendor', 'product', 'source']);
         let cache: any[] | null = null;
         // Filters an array of vulnerabilities based on query parameters.
         // Supports filtering by text query, severity, risk factors, excluded Kai status, and date ranges.
@@ -175,6 +176,16 @@ export default defineConfig({
           const limit = Number(q.limit || 50);
           const key = q.sortKey as string | undefined;
           const dir = q.sortDir as string | undefined;
+          if (key && !ALLOWED_SORT_KEYS.has(key)) {
+            res.statusCode = 400;
+            res.end(JSON.stringify({ error: 'invalid sortKey', allowed: Array.from(ALLOWED_SORT_KEYS) }));
+            return;
+          }
+          if (dir && !(dir === 'asc' || dir === 'desc')) {
+            res.statusCode = 400;
+            res.end(JSON.stringify({ error: 'invalid sortDir', allowed: ['asc', 'desc'] }));
+            return;
+          }
           const data = loadData();
           const filtered = applyFilters(data, q);
           const total = filtered.length;
