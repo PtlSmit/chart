@@ -10,24 +10,29 @@ import SeverityChart from "@/charts/SeverityChart";
 import RiskFactorsChart from "@/charts/RiskFactorsChart";
 import TrendChart from "@/charts/TrendChart";
 import AIManualRelationChart from "@/charts/AIManualRelationChart";
+import { getDefaultVulnsEndpoint } from "@/services/dataService";
 
 export default function Dashboard() {
   const { summary, loadFromUrl, loading, progressBytes, ingestedCount, error } =
     useData();
-  const [url, setUrl] = useState("/uiDemoData.json");
+  const [url, setUrl] = useState<string>(() => getDefaultVulnsEndpoint());
   const [autoLoaded, setAutoLoaded] = useState(false);
 
   useEffect(() => {
     if (!autoLoaded) {
-      // Auto-load local copy only if it exists (avoid showing global loading banner on 404)
+      // Probe API availability with a lightweight GET to /summary
       const checkAndLoad = async () => {
         try {
-          const res = await fetch("/uiDemoData.json", { method: "HEAD" });
-          if (res.ok) {
-            loadFromUrl("/uiDemoData.json");
+          const vulnsUrl = getDefaultVulnsEndpoint();
+          const base = vulnsUrl.replace(/\/?vulns\/?$/, "");
+          const summary = `${base}/summary`;
+          const resp = await fetch(summary, { method: "GET" });
+          if (resp.ok) {
+            // Use the configured endpoint (base or /vulns both accepted)
+            loadFromUrl(vulnsUrl);
           }
-        } catch {
-          // ignore — demo file not present
+        } catch (_) {
+          // ignore; user can input API URL manually
         } finally {
           setAutoLoaded(true);
         }
@@ -44,17 +49,17 @@ export default function Dashboard() {
             className="flex-1 min-w-0 w-full md:w-[360px]"
             value={url}
             onChange={(e) => setUrl(e.target.value)}
-            placeholder="https://…/ui_demo.json"
+            placeholder="http://localhost:8787/api/v1 or …/api/v1/vulns"
           />
           <button className="btn btn-primary" onClick={() => loadFromUrl(url)}>
             Load from URL
           </button>
-          {/* Upload from local file removed */}
+          {/* In remote mode, only API endpoints are supported */}
           <ExportButton />
         </div>
         <div className="tiny" style={{ marginTop: ".5rem" }}>
-          Tip: Local file in public/ is served at /uiDemoData.json. For GitHub
-          links, use the raw URL (raw.githubusercontent.com).
+          Tip: Point to an API base (e.g. http://localhost:8787/api/v1 or the
+          full /vulns endpoint). Configure via VITE_API_URL for dev.
         </div>
         {(loading || ingestedCount > 0) && (
           <div className="tiny" style={{ marginTop: ".25rem" }}>
@@ -76,7 +81,7 @@ export default function Dashboard() {
       <PreferencesDrawer />
 
       {summary && (
-        <div className="grid gap-4 grid-cols-1 md:grid-cols-2 xl:grid-cols-3">
+        <div className="grid gap-4 grid-cols-1 md:grid-cols-2 xl:grid-cols-2 2xl:grid-cols-2">
           <SeverityChart />
           <RiskFactorsChart />
           <TrendChart />

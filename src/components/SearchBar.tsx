@@ -1,12 +1,23 @@
 import React, { useMemo, useState } from 'react';
 import { useData } from '@/context/DataContext';
+import { useSearchParams } from 'react-router-dom';
+import type { Severity } from '@/types/vuln';
 
 export default function SearchBar() {
-  const { filters, setFilters } = useData();
+  const { filters, setFilters, setPage, setSort } = useData();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [local, setLocal] = useState(filters.query);
   const suggestions = useMemo(() => buildSuggestions(local), [local]);
 
   const apply = (q: string) => setFilters((f) => ({ ...f, query: q }));
+
+  const resetAll = () => {
+    setFilters(() => ({ query: '', severity: new Set<Severity>(), riskFactors: new Set<string>(), kaiStatusExclude: new Set<string>() }));
+    setSort(undefined);
+    setPage(0);
+    const clean = new URLSearchParams();
+    setSearchParams(clean, { replace: true });
+  };
 
   return (
     <div className="panel">
@@ -19,6 +30,7 @@ export default function SearchBar() {
           placeholder="Search CVE id, title, description…"
         />
         <button className="btn btn-primary" onClick={() => apply(local)}>Search</button>
+        <button className="btn btn-ghost" onClick={resetAll}>Reset All</button>
         {!!filters.query && (
           <span className="badge badge-outline">
             Query: {filters.query}

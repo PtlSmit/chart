@@ -16,6 +16,7 @@
       "@/components/*": ["src/components/*"],
       "@/charts/*": ["src/charts/*"],
       "@/context/*": ["src/context/*"],
+      "@/services/*": ["src/services/*"],
       "@/data/*": ["src/data/*"],
       "@/pages/*": ["src/pages/*"],
       "@/types/*": ["src/types/*"],
@@ -25,4 +26,3 @@
   },
   "include": ["src"]
 }
-
